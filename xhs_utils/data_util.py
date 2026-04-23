@@ -200,7 +200,7 @@ def save_to_xlsx(datas, file_path, type='note'):
     logger.info(f'数据保存至 {file_path}')
 
 
-def save_to_db(datas, db_config):
+def save_to_db(datas, db_config, crawl_task_id=''):
     missing = [k for k in ['host', 'port', 'user', 'password', 'database'] if not db_config.get(k)]
     if missing:
         raise ValueError(f"MySQL 配置不完整，缺少: {', '.join(missing)}")
@@ -263,7 +263,9 @@ def save_to_db(datas, db_config):
                 'ip_location': note_card.get('ip_location'),
             }
 
+        task_id = crawl_task_id.strip() if isinstance(crawl_task_id, str) and crawl_task_id.strip() else time.strftime('%Y%m%d_%H%M%S', time.localtime())
         rows = []
+        snapshot_rows = []
         now = time.strftime('%Y-%m-%d %H:%M:%S')
         for data in datas:
             raw_json = data.get('raw_data')
@@ -298,6 +300,15 @@ def save_to_db(datas, db_config):
                 str(row_data.get('last_update_time', '')),
                 str(row_data.get('ip_location', '')),
                 now,
+            ))
+            snapshot_rows.append((
+                task_id,
+                now,
+                str(row_data.get('note_id', '')),
+                int(row_data.get('liked_count') or 0),
+                int(row_data.get('collected_count') or 0),
+                int(row_data.get('comment_count') or 0),
+                int(row_data.get('share_count') or 0),
             ))
         if rows:
             with conn.cursor() as cursor:
@@ -334,10 +345,18 @@ def save_to_db(datas, db_config):
                     ''',
                     rows,
                     )
+                    cursor.executemany(
+                    '''
+                    INSERT INTO spider_xhs_note_snapshot (
+                        crawl_task_id, crawl_time, note_id, liked_count, collected_count, comment_count, share_count
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ''',
+                    snapshot_rows,
+                    )
                 except pymysql.err.ProgrammingError as e:
                     # 1146: Table doesn't exist
                     if e.args and e.args[0] == 1146:
-                        raise ValueError('数据表 spider_xhs_note 不存在，请先执行 sql/init_mysql.sql 初始化数据库') from e
+                        raise ValueError('数据表不存在，请先执行 sql/init_mysql.sql 初始化数据库') from e
                     raise
         conn.commit()
         logger.info(f"数据保存至 MySQL({db_config['host']}:{db_config['port']}/{db_config['database']}), 条数: {len(rows)}")

@@ -1,6 +1,7 @@
 import json
 import os
 import argparse
+from datetime import datetime
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.common_util import init
@@ -32,7 +33,7 @@ class Data_Spider():
         logger.info(f'爬取笔记信息 {note_url}: {success}, msg: {msg}')
         return success, msg, note_info
 
-    def spider_some_note(self, notes: list, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', proxies=None):
+    def spider_some_note(self, notes: list, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None):
         """
         爬取一些笔记的信息
         :param notes:
@@ -54,10 +55,10 @@ class Data_Spider():
             file_path = os.path.abspath(os.path.join(base_path['excel'], f'{excel_name}.xlsx'))
             save_to_xlsx(note_list, file_path)
         if save_choice == 'all' or save_choice == 'db':
-            save_to_db(note_list, base_path['db'])
+            save_to_db(note_list, base_path['db'], crawl_task_id)
 
 
-    def spider_user_all_note(self, user_url: str, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', proxies=None):
+    def spider_user_all_note(self, user_url: str, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None):
         """
         爬取一个用户的所有笔记
         :param user_url:
@@ -75,14 +76,14 @@ class Data_Spider():
                     note_list.append(note_url)
             if save_choice == 'all' or save_choice == 'excel':
                 excel_name = user_url.split('/')[-1].split('?')[0]
-            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, proxies)
+            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, crawl_task_id, proxies)
         except Exception as e:
             success = False
             msg = e
         logger.info(f'爬取用户所有视频 {user_url}: {success}, msg: {msg}')
         return note_list, success, msg
 
-    def spider_some_search_note(self, query: str, require_num: int, cookies_str: str, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', proxies=None):
+    def spider_some_search_note(self, query: str, require_num: int, cookies_str: str, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', proxies=None):
         """
             指定数量搜索笔记，设置排序方式和笔记类型和笔记数量
             :param query 搜索的关键词
@@ -107,7 +108,7 @@ class Data_Spider():
                     note_list.append(note_url)
             if save_choice == 'all' or save_choice == 'excel':
                 excel_name = query
-            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, proxies)
+            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, crawl_task_id, proxies)
         except Exception as e:
             success = False
             msg = e
@@ -125,10 +126,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spider_XHS 入口')
     parser.add_argument('--query', required=True, help='搜索关键词，必填')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
+    parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
     args = parser.parse_args()
 
     cookies_str, base_path = init()
     data_spider = Data_Spider()
+    crawl_task_id = args.taskId.strip() if args.taskId and args.taskId.strip() else datetime.now().strftime('%Y%m%d_%H%M%S')
     """
         save_choice: all: 保存所有的信息（media + excel + db）, media: 保存视频和图片（media-video只下载视频, media-image只下载图片，media都下载）, excel: 保存到excel, db: 保存到mysql
         save_choice 为 excel 或者 all 时，excel_name 不能为空
@@ -139,11 +142,11 @@ if __name__ == '__main__':
     notes = [
         r'https://www.xiaohongshu.com/explore/683fe17f0000000023017c6a?xsec_token=ABBr_cMzallQeLyKSRdPk9fwzA0torkbT_ubuQP1ayvKA=&xsec_source=pc_user',
     ]
-    data_spider.spider_some_note(notes, cookies_str, base_path, 'all', 'test')
+    data_spider.spider_some_note(notes, cookies_str, base_path, 'all', 'test', crawl_task_id=crawl_task_id)
 
     # 2 爬取用户的所有笔记信息 用户链接 如下所示 注意此url会过期！
     user_url = 'https://www.xiaohongshu.com/user/profile/64c3f392000000002b009e45?xsec_token=AB-GhAToFu07JwNk_AMICHnp7bSTjVz2beVIDBwSyPwvM=&xsec_source=pc_feed'
-    data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all')
+    data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all', crawl_task_id=crawl_task_id)
 
     # 3 搜索指定关键词的笔记
     query = args.query
@@ -158,4 +161,4 @@ if __name__ == '__main__':
     #     "latitude": 39.9725,
     #     "longitude": 116.4207
     # }
-    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'all', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None)
+    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'all', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id)

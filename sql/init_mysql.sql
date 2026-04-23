@@ -34,3 +34,19 @@ CREATE TABLE IF NOT EXISTS spider_xhs_note (
   KEY idx_user_id (user_id),
   KEY idx_upload_time (upload_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS spider_xhs_note_snapshot (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  crawl_task_id VARCHAR(64) NOT NULL,
+  crawl_time DATETIME NOT NULL,
+  note_id VARCHAR(64) NOT NULL,
+  liked_count INT DEFAULT 0,
+  collected_count INT DEFAULT 0,
+  comment_count INT DEFAULT 0,
+  share_count INT DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_crawl_task_id (crawl_task_id),
+  KEY idx_note_id (note_id),
+  KEY idx_crawl_time (crawl_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
