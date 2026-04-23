@@ -4,7 +4,7 @@ import argparse
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.common_util import init
-from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx
+from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db
 
 
 class Data_Spider():
@@ -22,9 +22,10 @@ class Data_Spider():
         try:
             success, msg, note_info = self.xhs_apis.get_note_info(note_url, cookies_str, proxies)
             if success:
-                note_info = note_info['data']['items'][0]
-                note_info['url'] = note_url
-                note_info = handle_note_info(note_info)
+                raw_note_info = note_info['data']['items'][0]
+                raw_note_info['url'] = note_url
+                note_info = handle_note_info(raw_note_info)
+                note_info['raw_data'] = json.dumps(raw_note_info, ensure_ascii=False)
         except Exception as e:
             success = False
             msg = e
@@ -52,6 +53,8 @@ class Data_Spider():
         if save_choice == 'all' or save_choice == 'excel':
             file_path = os.path.abspath(os.path.join(base_path['excel'], f'{excel_name}.xlsx'))
             save_to_xlsx(note_list, file_path)
+        if save_choice == 'all' or save_choice == 'db':
+            save_to_db(note_list, base_path['db'])
 
 
     def spider_user_all_note(self, user_url: str, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', proxies=None):
@@ -127,7 +130,7 @@ if __name__ == '__main__':
     cookies_str, base_path = init()
     data_spider = Data_Spider()
     """
-        save_choice: all: 保存所有的信息, media: 保存视频和图片（media-video只下载视频, media-image只下载图片，media都下载）, excel: 保存到excel
+        save_choice: all: 保存所有的信息（media + excel + db）, media: 保存视频和图片（media-video只下载视频, media-image只下载图片，media都下载）, excel: 保存到excel, db: 保存到mysql
         save_choice 为 excel 或者 all 时，excel_name 不能为空
     """
 

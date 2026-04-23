@@ -3,6 +3,7 @@ import os
 import re
 import time
 import openpyxl
+import pymysql
 import requests
 from loguru import logger
 from retry import retry
@@ -197,6 +198,151 @@ def save_to_xlsx(datas, file_path, type='note'):
         ws.append(list(data.values()))
     wb.save(file_path)
     logger.info(f'数据保存至 {file_path}')
+
+
+def save_to_db(datas, db_config):
+    missing = [k for k in ['host', 'port', 'user', 'password', 'database'] if not db_config.get(k)]
+    if missing:
+        raise ValueError(f"MySQL 配置不完整，缺少: {', '.join(missing)}")
+    conn = pymysql.connect(
+        host=db_config['host'],
+        port=int(db_config['port']),
+        user=db_config['user'],
+        password=db_config['password'],
+        database=db_config['database'],
+        charset=db_config.get('charset', 'utf8mb4'),
+        autocommit=False,
+    )
+    try:
+        def _get_by_path(obj, path, default=None):
+            current = obj
+            for key in path:
+                if isinstance(key, int):
+                    if not isinstance(current, list) or len(current) <= key:
+                        return default
+                    current = current[key]
+                else:
+                    if not isinstance(current, dict) or key not in current:
+                        return default
+                    current = current[key]
+            return current
+
+        def _extract_db_fields_from_raw(raw_note):
+            note_card = _get_by_path(raw_note, ['note_card'], {}) or {}
+            user = _get_by_path(note_card, ['user'], {}) or {}
+            interact_info = _get_by_path(note_card, ['interact_info'], {}) or {}
+            video = _get_by_path(note_card, ['video'], {}) or {}
+            streams = _get_by_path(video, ['media', 'stream', 'h264'], []) or []
+            video_addr = None
+            if streams and isinstance(streams, list):
+                video_addr = streams[0].get('master_url') or streams[0].get('url')
+            if not video_addr and isinstance(video, dict) and 'consumer' in video:
+                origin_key = video['consumer'].get('origin_video_key')
+                if origin_key:
+                    video_addr = f"https://sns-video-bd.xhscdn.com/{origin_key}"
+            return {
+                'note_id': raw_note.get('id'),
+                'note_url': raw_note.get('url'),
+                'note_type': note_card.get('type'),
+                'user_id': user.get('user_id'),
+                'home_url': f"https://www.xiaohongshu.com/user/profile/{user.get('user_id')}" if user.get('user_id') else '',
+                'nickname': user.get('nickname'),
+                'avatar': user.get('avatar'),
+                'title': note_card.get('title'),
+                'desc': note_card.get('desc'),
+                'liked_count': interact_info.get('liked_count'),
+                'collected_count': interact_info.get('collected_count'),
+                'comment_count': interact_info.get('comment_count'),
+                'share_count': interact_info.get('share_count'),
+                'video_cover': _get_by_path(note_card, ['image_list', 0, 'info_list', 1, 'url']),
+                'video_addr': video_addr,
+                'image_list': note_card.get('image_list'),
+                'tags': note_card.get('tag_list'),
+                'upload_time': note_card.get('time'),
+                'last_update_time': note_card.get('last_update_time'),
+                'ip_location': note_card.get('ip_location'),
+            }
+
+        rows = []
+        now = time.strftime('%Y-%m-%d %H:%M:%S')
+        for data in datas:
+            raw_json = data.get('raw_data')
+            raw_fields = {}
+            if raw_json:
+                try:
+                    raw_fields = _extract_db_fields_from_raw(json.loads(raw_json))
+                except Exception:
+                    raw_fields = {}
+
+            row_data = {**data, **raw_fields}
+            rows.append((
+                str(row_data.get('note_id', '')),
+                str(row_data.get('note_url', '')),
+                str(row_data.get('note_type', '')),
+                str(row_data.get('user_id', '')),
+                str(row_data.get('home_url', '')),
+                str(row_data.get('nickname', '')),
+                str(row_data.get('avatar', '')),
+                str(row_data.get('title', '')),
+                str(row_data.get('desc', '')),
+                int(row_data.get('liked_count') or 0),
+                int(row_data.get('collected_count') or 0),
+                int(row_data.get('comment_count') or 0),
+                int(row_data.get('share_count') or 0),
+                str(row_data.get('video_cover') or ''),
+                str(row_data.get('video_addr') or ''),
+                json.dumps(row_data.get('image_list') or [], ensure_ascii=False),
+                json.dumps(row_data.get('tags') or [], ensure_ascii=False),
+                row_data.get('raw_data') or json.dumps(row_data, ensure_ascii=False),
+                str(row_data.get('upload_time', '')),
+                str(row_data.get('last_update_time', '')),
+                str(row_data.get('ip_location', '')),
+                now,
+            ))
+        if rows:
+            with conn.cursor() as cursor:
+                try:
+                    cursor.executemany(
+                    '''
+                    INSERT INTO spider_xhs_note (
+                        note_id, note_url, note_type, user_id, home_url, nickname, avatar,
+                        title, `desc`, liked_count, collected_count, comment_count, share_count,
+                        video_cover, video_addr, image_list, tags, raw_data, upload_time, last_update_time, ip_location, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON DUPLICATE KEY UPDATE
+                        note_url=VALUES(note_url),
+                        note_type=VALUES(note_type),
+                        user_id=VALUES(user_id),
+                        home_url=VALUES(home_url),
+                        nickname=VALUES(nickname),
+                        avatar=VALUES(avatar),
+                        title=VALUES(title),
+                        `desc`=VALUES(`desc`),
+                        liked_count=VALUES(liked_count),
+                        collected_count=VALUES(collected_count),
+                        comment_count=VALUES(comment_count),
+                        share_count=VALUES(share_count),
+                        video_cover=VALUES(video_cover),
+                        video_addr=VALUES(video_addr),
+                        image_list=VALUES(image_list),
+                        tags=VALUES(tags),
+                        raw_data=VALUES(raw_data),
+                        upload_time=VALUES(upload_time),
+                        last_update_time=VALUES(last_update_time),
+                        ip_location=VALUES(ip_location),
+                        updated_at=VALUES(updated_at)
+                    ''',
+                    rows,
+                    )
+                except pymysql.err.ProgrammingError as e:
+                    # 1146: Table doesn't exist
+                    if e.args and e.args[0] == 1146:
+                        raise ValueError('数据表 spider_xhs_note 不存在，请先执行 sql/init_mysql.sql 初始化数据库') from e
+                    raise
+        conn.commit()
+        logger.info(f"数据保存至 MySQL({db_config['host']}:{db_config['port']}/{db_config['database']}), 条数: {len(rows)}")
+    finally:
+        conn.close()
 
 def download_media(path, name, url, type):
     if type == 'image':

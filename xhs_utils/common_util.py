@@ -6,10 +6,18 @@ def load_env():
     load_dotenv()
     cookies_str = os.getenv('COOKIES')
     datas_base_path = os.getenv('DATAS_BASE_PATH')
-    return cookies_str, datas_base_path
+    db_config = {
+        'host': os.getenv('MYSQL_HOST', '127.0.0.1'),
+        'port': int(os.getenv('MYSQL_PORT', '3306')),
+        'user': os.getenv('MYSQL_USER', ''),
+        'password': os.getenv('MYSQL_PASSWORD', ''),
+        'database': os.getenv('MYSQL_DATABASE', ''),
+        'charset': os.getenv('MYSQL_CHARSET', 'utf8mb4'),
+    }
+    return cookies_str, datas_base_path, db_config
 
 def init():
-    cookies_str, datas_base_path = load_env()
+    cookies_str, datas_base_path, db_config = load_env()
     if not datas_base_path:
         raise ValueError('环境变量 DATAS_BASE_PATH 未配置，请在 .env 中设置')
     datas_base_path = os.path.abspath(os.path.expanduser(datas_base_path))
@@ -22,5 +30,6 @@ def init():
     base_path = {
         'media': media_base_path,
         'excel': excel_base_path,
+        'db': db_config,
     }
     return cookies_str, base_path
