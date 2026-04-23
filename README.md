@@ -156,6 +156,15 @@ pip install -r requirements.txt
 npm install
 ```
 
+or 
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+```
+
 ### 🎨 配置 Cookie
 
 在项目根目录的 `.env` 文件中填入你的登录 Cookie：

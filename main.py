@@ -1,5 +1,6 @@
 import json
 import os
+import argparse
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.common_util import init
@@ -118,6 +119,10 @@ if __name__ == '__main__':
         感谢star和follow
     """
 
+    parser = argparse.ArgumentParser(description='Spider_XHS 入口')
+    parser.add_argument('--query', required=True, help='搜索关键词，必填')
+    args = parser.parse_args()
+
     cookies_str, base_path = init()
     data_spider = Data_Spider()
     """
@@ -137,7 +142,7 @@ if __name__ == '__main__':
     data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all')
 
     # 3 搜索指定关键词的笔记
-    query = "榴莲"
+    query = args.query
     query_num = 10
     sort_type_choice = 0  # 0 综合排序, 1 最新, 2 最多点赞, 3 最多评论, 4 最多收藏
     note_type = 0 # 0 不限, 1 视频笔记, 2 普通笔记
