@@ -24,6 +24,24 @@ def timestamp_to_str(timestamp):
     dt = time.strftime("%Y-%m-%d %H:%M:%S", time_local)
     return dt
 
+
+def parse_count(value):
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip().replace(',', '').replace('+', '')
+    if not text:
+        return 0
+    try:
+        if text.endswith('亿'):
+            return int(float(text[:-1]) * 100000000)
+        if text.endswith('万'):
+            return int(float(text[:-1]) * 10000)
+        return int(float(text))
+    except (TypeError, ValueError):
+        return 0
+
 def handle_user_info(data, user_id):
     home_url = f'https://www.xiaohongshu.com/user/profile/{user_id}'
     nickname = data['basic_info']['nickname']
@@ -287,10 +305,10 @@ def save_to_db(datas, db_config, crawl_task_id=''):
                 str(row_data.get('avatar', '')),
                 str(row_data.get('title', '')),
                 str(row_data.get('desc', '')),
-                int(row_data.get('liked_count') or 0),
-                int(row_data.get('collected_count') or 0),
-                int(row_data.get('comment_count') or 0),
-                int(row_data.get('share_count') or 0),
+                parse_count(row_data.get('liked_count')),
+                parse_count(row_data.get('collected_count')),
+                parse_count(row_data.get('comment_count')),
+                parse_count(row_data.get('share_count')),
                 str(row_data.get('video_cover') or ''),
                 str(row_data.get('video_addr') or ''),
                 json.dumps(row_data.get('image_list') or [], ensure_ascii=False),
@@ -305,10 +323,10 @@ def save_to_db(datas, db_config, crawl_task_id=''):
                 task_id,
                 now,
                 str(row_data.get('note_id', '')),
-                int(row_data.get('liked_count') or 0),
-                int(row_data.get('collected_count') or 0),
-                int(row_data.get('comment_count') or 0),
-                int(row_data.get('share_count') or 0),
+                parse_count(row_data.get('liked_count')),
+                parse_count(row_data.get('collected_count')),
+                parse_count(row_data.get('comment_count')),
+                parse_count(row_data.get('share_count')),
             ))
         if rows:
             with conn.cursor() as cursor:
