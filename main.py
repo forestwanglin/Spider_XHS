@@ -126,10 +126,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Spider_XHS 入口')
     parser.add_argument('--query', required=True, help='搜索关键词，必填')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
+    parser.add_argument('--cookie', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES')
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
     args = parser.parse_args()
 
-    cookies_str, base_path = init()
+    env_cookies_str, base_path = init()
+    cookies_str = args.cookie.strip() if args.cookie and args.cookie.strip() else env_cookies_str
+    if not cookies_str:
+        raise ValueError('Cookie 未提供：请传 --cookie 或在 .env 中配置 COOKIES')
     data_spider = Data_Spider()
     crawl_task_id = args.taskId.strip() if args.taskId and args.taskId.strip() else datetime.now().strftime('%Y%m%d_%H%M%S')
     """
