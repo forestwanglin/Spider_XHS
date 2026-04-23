@@ -121,6 +121,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Spider_XHS 入口')
     parser.add_argument('--query', required=True, help='搜索关键词，必填')
+    parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
     args = parser.parse_args()
 
     cookies_str, base_path = init()
@@ -143,7 +144,7 @@ if __name__ == '__main__':
 
     # 3 搜索指定关键词的笔记
     query = args.query
-    query_num = 10
+    query_num = args.num
     sort_type_choice = 0  # 0 综合排序, 1 最新, 2 最多点赞, 3 最多评论, 4 最多收藏
     note_type = 0 # 0 不限, 1 视频笔记, 2 普通笔记
     note_time = 0  # 0 不限, 1 一天内, 2 一周内天, 3 半年内
