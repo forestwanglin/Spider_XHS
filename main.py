@@ -5,7 +5,58 @@ from datetime import datetime
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.common_util import init
-from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db
+from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db, parse_count
+
+
+DETAIL_FILTER_FIELDS = {
+    'like': 'like',
+    'collect': 'collect',
+    'comment': 'comment',
+}
+
+
+def parse_detail_filter(detail_filter_json: str):
+    if not detail_filter_json:
+        return {}
+    try:
+        raw_filter = json.loads(detail_filter_json)
+    except json.JSONDecodeError as e:
+        raise ValueError(f'--detailFilter 不是合法 JSON: {e}') from e
+    if not isinstance(raw_filter, dict):
+        raise ValueError('--detailFilter 必须是 JSON 对象')
+
+    detail_filter = {}
+    for key, value in raw_filter.items():
+        if key == 'share':
+            logger.warning('列表页无法稳定拿到分享数，已忽略 detailFilter 中的分享条件')
+            continue
+        if key not in DETAIL_FILTER_FIELDS:
+            raise ValueError(f'--detailFilter 不支持字段 {key}，仅支持 like、collect、comment')
+        if not isinstance(value, list) or len(value) != 2:
+            raise ValueError(f'--detailFilter 字段 {key} 必须是 [最小值, 最大值]')
+        min_count = parse_count(value[0])
+        max_count = parse_count(value[1])
+        if min_count > max_count:
+            raise ValueError(f'--detailFilter 字段 {key} 的最小值不能大于最大值')
+        normalized_key = DETAIL_FILTER_FIELDS[key]
+        detail_filter[normalized_key] = (min_count, max_count)
+    return detail_filter
+
+
+def should_spider_note_detail(note: dict, detail_filter: dict):
+    if not detail_filter:
+        return True
+    interact_info = note.get('note_card', {}).get('interact_info', {}) or {}
+    count_fields = {
+        'like': 'liked_count',
+        'collect': 'collected_count',
+        'comment': 'comment_count',
+    }
+    for key, (min_count, max_count) in detail_filter.items():
+        count = parse_count(interact_info.get(count_fields[key]))
+        if count < min_count or count > max_count:
+            return False
+    return True
 
 
 class Data_Spider():
@@ -83,7 +134,7 @@ class Data_Spider():
         logger.info(f'爬取用户所有视频 {user_url}: {success}, msg: {msg}')
         return note_list, success, msg
 
-    def spider_some_search_note(self, query: str, require_num: int, cookies_str: str, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', proxies=None):
+    def spider_some_search_note(self, query: str, require_num: int, cookies_str: str, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', detail_filter: dict = None, proxies=None):
         """
             指定数量搜索笔记，设置排序方式和笔记类型和笔记数量
             :param query 搜索的关键词
@@ -104,6 +155,9 @@ class Data_Spider():
                 notes = list(filter(lambda x: x['model_type'] == "note", notes))
                 logger.info(f'搜索关键词 {query} 笔记数量: {len(notes)}')
                 for note in notes:
+                    if not should_spider_note_detail(note, detail_filter):
+                        logger.info(f"跳过详情抓取 note_id={note.get('id')}，未命中 detailFilter")
+                        continue
                     note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
                     note_list.append(note_url)
             if save_choice == 'all' or save_choice == 'excel':
@@ -123,12 +177,28 @@ if __name__ == '__main__':
         感谢star和follow
     """
 
-    parser = argparse.ArgumentParser(description='Spider_XHS 入口')
+    parser = argparse.ArgumentParser(
+        description='Spider_XHS 入口',
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog='示例:\n'
+               '  python main.py --query "榴莲"\n'
+               '  python main.py --query "榴莲" --num 20 --detailFilter \'{"like":[100,999999],"collect":[20,999999],"comment":[0,999999]}\'\n'
+               '说明:\n'
+               '  使用 -h 或 --help 打印所有可用参数和描述。\n'
+               '  列表页无法稳定拿到分享数，detailFilter 中的 share 会被忽略。'
+    )
     parser.add_argument('--query', required=True, help='搜索关键词，必填')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
     parser.add_argument('--cookie', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES')
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
+    parser.add_argument(
+        '--detailFilter',
+        required=False,
+        default='',
+        help='详情抓取前置过滤 JSON，可选；仅支持 like/collect/comment 区间，示例: \'{"like":[100,999999],"collect":[20,999999],"comment":[0,999999]}\''
+    )
     args = parser.parse_args()
+    detail_filter = parse_detail_filter(args.detailFilter)
 
     env_cookies_str, base_path = init()
     cookies_str = args.cookie.strip() if args.cookie and args.cookie.strip() else env_cookies_str
@@ -165,4 +235,4 @@ if __name__ == '__main__':
     #     "latitude": 39.9725,
     #     "longitude": 116.4207
     # }
-    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'all', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id)
+    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'all', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, detail_filter=detail_filter)
