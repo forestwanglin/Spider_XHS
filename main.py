@@ -59,6 +59,20 @@ def should_spider_note_detail(note: dict, detail_filter: dict):
     return True
 
 
+def build_db_record_from_search_note(note: dict):
+    note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
+    raw_note = {
+        'id': note['id'],
+        'url': note_url,
+        'note_card': note.get('note_card', {}),
+    }
+    return {
+        'note_id': note['id'],
+        'note_url': note_url,
+        'raw_data': json.dumps(raw_note, ensure_ascii=False),
+    }
+
+
 class Data_Spider():
     def __init__(self):
         self.xhs_apis = XHS_Apis()
@@ -84,7 +98,7 @@ class Data_Spider():
         logger.info(f'爬取笔记信息 {note_url}: {success}, msg: {msg}')
         return success, msg, note_info
 
-    def spider_some_note(self, notes: list, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None):
+    def spider_some_note(self, notes: list, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None, extra_db_rows: list = None):
         """
         爬取一些笔记的信息
         :param notes:
@@ -106,7 +120,10 @@ class Data_Spider():
             file_path = os.path.abspath(os.path.join(base_path['excel'], f'{excel_name}.xlsx'))
             save_to_xlsx(note_list, file_path)
         if save_choice == 'all' or save_choice == 'db':
-            save_to_db(note_list, base_path['db'], crawl_task_id)
+            db_rows = list(note_list)
+            if extra_db_rows:
+                db_rows.extend(extra_db_rows)
+            save_to_db(db_rows, base_path['db'], crawl_task_id)
 
 
     def spider_user_all_note(self, user_url: str, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None):
@@ -149,6 +166,7 @@ class Data_Spider():
             返回搜索的结果
         """
         note_list = []
+        filtered_db_rows = []
         try:
             success, msg, notes = self.xhs_apis.search_some_note(query, require_num, cookies_str, sort_type_choice, note_type, note_time, note_range, pos_distance, geo, proxies)
             if success:
@@ -157,12 +175,13 @@ class Data_Spider():
                 for note in notes:
                     if not should_spider_note_detail(note, detail_filter):
                         logger.info(f"跳过详情抓取 note_id={note.get('id')}，未命中 detailFilter")
+                        filtered_db_rows.append(build_db_record_from_search_note(note))
                         continue
                     note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
                     note_list.append(note_url)
             if save_choice == 'all' or save_choice == 'excel':
                 excel_name = query
-            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, crawl_task_id, proxies)
+            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, crawl_task_id, proxies, extra_db_rows=filtered_db_rows)
         except Exception as e:
             success = False
             msg = e
