@@ -44,6 +44,38 @@
 
 ---
 
+## 成品
+
+### repo地址： [XHS_ALL_IN_ONE](https://github.com/cv-cat/XHS_ALL_IN_ONE)
+
+### 账号矩阵 — 多账号绑定与健康管理
+
+支持绑定多个 PC / Creator 账号，扫码登录、手机验证码、Cookie 导入三种方式。Cookie 加密存储，2 小时自动健康巡检，过期自动通知。
+
+<img src="https://github.com/cv-cat/XHS_ALL_IN_ONE/blob/master/static/frontend_1.jpg" width="600" />
+
+### 素材优化 — AI 图片润色
+
+选择草稿中的任意图片，添加参考图，输入润色指令，AI 生成优化后的图片并原位替换。当前素材和优化结果并排对比，点击即可放大预览。
+
+<img src="https://github.com/cv-cat/XHS_ALL_IN_ONE/blob/master/static/frontend_5.jpg" width="600" />
+
+### 发布中心 — 一键发布到小红书
+
+预览草稿内容和图片素材，选择 Creator 账号，设置可见性和发布模式（立即/定时），发布校验通过后一键发布到小红书创作者平台。
+
+<img src="https://github.com/cv-cat/XHS_ALL_IN_ONE/blob/master/static/frontend_6.jpg" width="600" />
+
+---
+
+## 🧩 Skills 支持
+
+当前项目已经支持基于 skills 的能力接入，既可以直接作为 `Spider_XHS` 的底层能力仓库使用，也可以通过标准化 skills 方式被上层 Agent 工具链引入。
+
+如果你希望直接复用已经封装好的 skills，可以查看 [XhsSkills](https://github.com/cv-cat/XhsSkills)。该仓库专门用于存放基于 `Spider_XHS` 封装的 Agent Skills，目前可被 `Clawbot`、`Claude Code`、`Codex` 等支持 skills 的工具直接引入与集成。
+
+---
+
 ## ⭐ 已实现功能
 
 | 模块 | 功能 | 状态 |
@@ -115,14 +147,6 @@ pgy = PuGongYingAPI()
 kol_list = pgy.get_some_user(num=50, cookies=cookies)
 best_kols = your_ai_agent(kol_list, brand_profile)
 ```
-
----
-
-## 🧩 Skills 支持
-
-当前项目已经支持基于 skills 的能力接入，既可以直接作为 `Spider_XHS` 的底层能力仓库使用，也可以通过标准化 skills 方式被上层 Agent 工具链引入。
-
-如果你希望直接复用已经封装好的 skills，可以查看 [XhsSkills](https://github.com/cv-cat/XhsSkills)。该仓库专门用于存放基于 `Spider_XHS` 封装的 Agent Skills，目前可被 `Clawbot`、`Claude Code`、`Codex` 等支持 skills 的工具直接引入与集成。
 
 ---
 
@@ -284,9 +308,9 @@ Spider_XHS/
 
 如果你对爬虫和 AI Agent 感兴趣，请加作者主页 wx 通过邀请加入群聊
 
-ps: 请加群9、10，人满或者过期 issue | wx 提醒
+ps: 请加群10、11，人满或者过期 issue | wx 提醒
 
-![group7](https://github.com/cv-cat/Spider_XHS/blob/master/author/group9.jpg)
+![group7](https://github.com/cv-cat/Spider_XHS/blob/master/author/group10-0506.jpg)
 
-![group7](https://github.com/cv-cat/Spider_XHS/blob/master/author/group10.jpg)
+![group7](https://github.com/cv-cat/Spider_XHS/blob/master/author/group11-0506.jpg)
 
