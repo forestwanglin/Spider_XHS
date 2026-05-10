@@ -200,8 +200,8 @@ if __name__ == '__main__':
         description='Spider_XHS 入口',
         formatter_class=argparse.RawTextHelpFormatter,
         epilog='示例:\n'
-               '  python main.py --query "榴莲"\n'
-               '  python main.py --query "榴莲" --num 20 --detailFilter \'{"like":[100,999999],"collect":[20,999999],"comment":[0,999999]}\'\n'
+               '  python -m spider.spider --query "榴莲"\n'
+               '  python -m spider.spider --query "榴莲" --num 20 --detailFilter \'{"like":[100,999999],"collect":[20,999999],"comment":[0,999999]}\'\n'
                '说明:\n'
                '  使用 -h 或 --help 打印所有可用参数和描述。\n'
                '  列表页无法稳定拿到分享数，detailFilter 中的 share 会被忽略。'
