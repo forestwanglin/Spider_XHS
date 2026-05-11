@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
-from xhs_utils.common_util import init
+from xhs_utils.common_util import init, load_env
 from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db, parse_count
 
 
@@ -188,6 +188,11 @@ class Data_Spider():
         logger.info(f'搜索关键词 {query} 笔记: {success}, msg: {msg}')
         return note_list, success, msg
 
+
+def validate_cookies(cookies_str: str):
+    xhs_apis = XHS_Apis()
+    return xhs_apis.get_user_self_info2(cookies_str)
+
 if __name__ == '__main__':
     """
         此文件为爬虫的入口文件，可以直接运行
@@ -202,14 +207,16 @@ if __name__ == '__main__':
         epilog='示例:\n'
                '  python -m spider.spider --query "榴莲"\n'
                '  python -m spider.spider --query "榴莲" --num 20 --detailFilter \'{"like":[100,999999],"collect":[20,999999],"comment":[0,999999]}\'\n'
+               '  python -m spider.spider --validate-cookies --cookies "a1=...; web_session=..."\n'
                '说明:\n'
                '  使用 -h 或 --help 打印所有可用参数和描述。\n'
                '  列表页无法稳定拿到分享数，detailFilter 中的 share 会被忽略。'
     )
-    parser.add_argument('--query', required=True, help='搜索关键词，必填')
+    parser.add_argument('--query', required=False, default='', help='搜索关键词；普通抓取时必填')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
-    parser.add_argument('--cookie', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES')
+    parser.add_argument('--cookies', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES。校验模式下必须显式传入')
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
+    parser.add_argument('--validate-cookies', action='store_true', help='只校验当前 cookies 是否有效；开启后必须显式传 --cookies')
     parser.add_argument(
         '--detailFilter',
         required=False,
@@ -219,10 +226,24 @@ if __name__ == '__main__':
     args = parser.parse_args()
     detail_filter = parse_detail_filter(args.detailFilter)
 
-    env_cookies_str, base_path = init()
-    cookies_str = args.cookie.strip() if args.cookie and args.cookie.strip() else env_cookies_str
+    env_cookies_str, _, _ = load_env()
+    explicit_cookie = args.cookies.strip() if args.cookies and args.cookies.strip() else ''
+    if args.validate_cookies:
+        if not explicit_cookie:
+            raise ValueError('开启 --validate-cookies 时，必须显式传 --cookies')
+        success, msg, _ = validate_cookies(explicit_cookie)
+        if success:
+            print('COOKIES_VALID')
+            raise SystemExit(0)
+        print(f"COOKIES_INVALID:'{explicit_cookie}'")
+        raise SystemExit(1)
+
+    _, base_path = init()
+    cookies_str = explicit_cookie or env_cookies_str
     if not cookies_str:
-        raise ValueError('Cookie 未提供：请传 --cookie 或在 .env 中配置 COOKIES')
+        raise ValueError('Cookie 未提供：请传 --cookies 或在 .env 中配置 COOKIES')
+    if not args.query or not args.query.strip():
+        raise ValueError('Query 未提供：普通抓取请传 --query')
     data_spider = Data_Spider()
     crawl_task_id = args.taskId.strip() if args.taskId and args.taskId.strip() else datetime.now().strftime('%Y%m%d_%H%M%S')
     """
@@ -241,7 +262,7 @@ if __name__ == '__main__':
     # data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all', crawl_task_id=crawl_task_id)
 
     # 3 搜索指定关键词的笔记
-    query = args.query
+    query = args.query.strip()
     query_num = args.num
     sort_type_choice = 0  # 0 综合排序, 1 最新, 2 最多点赞, 3 最多评论, 4 最多收藏
     note_type = 0 # 0 不限, 1 视频笔记, 2 普通笔记
