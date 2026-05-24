@@ -1,24 +1,49 @@
+import subprocess
+import sys
 import unittest
 from unittest.mock import Mock, patch
 
-from main import Data_Spider, parse_detail_filter, should_spider_note_detail
+from main import (
+    Data_Spider,
+    load_cleaning_rules_from_db,
+    parse_cleaning_rule_ids,
+    should_spider_note_detail,
+)
 
 
 class DetailFilterTest(unittest.TestCase):
-    def test_parse_detail_filter_ignores_share_and_matches_supported_counts(self):
-        detail_filter = parse_detail_filter(
-            '{"like":[100,200],"collect":[10,99],"comment":[0,20],"share":[1,999]}'
+    def test_cli_help_only_exposes_cleaning_rule_filter(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "spider.spider", "--help"],
+            check=True,
+            capture_output=True,
+            text=True,
         )
 
-        self.assertEqual(
-            detail_filter,
-            {
-                "like": (100, 200),
-                "collect": (10, 99),
-                "comment": (0, 20),
-            },
+        self.assertNotIn("detail" + "Filter", result.stdout)
+        self.assertIn("cleaningRuleIds", result.stdout)
+
+    def test_parse_cleaning_rule_ids_deduplicates_comma_separated_values(self):
+        self.assertEqual(parse_cleaning_rule_ids(" 3,2，3,,1 "), [3, 2, 1])
+
+    @patch("xhs_utils.cleaning_rule_filter.pymysql.connect")
+    def test_load_cleaning_rules_from_db_keeps_requested_order(self, mock_connect):
+        cursor = Mock()
+        cursor.fetchall.return_value = [
+            {"id": 2, "rule_type": "interaction", "is_enabled": 1, "is_deleted": 0},
+            {"id": 1, "rule_type": "content", "content_keywords": '["a"]', "is_enabled": 1, "is_deleted": 0},
+        ]
+        mock_connect.return_value.cursor.return_value.__enter__.return_value = cursor
+
+        rules = load_cleaning_rules_from_db(
+            [1, 2],
+            {"host": "127.0.0.1", "port": 3306, "user": "u", "password": "p", "database": "d"},
         )
 
+        self.assertEqual([rule["id"] for rule in rules], [1, 2])
+        self.assertEqual(rules[0]["content_keywords"], ["a"])
+
+    def test_cleaning_rules_require_all_rules_to_match_before_detail_crawl(self):
         note = {
             "note_card": {
                 "interact_info": {
@@ -28,20 +53,46 @@ class DetailFilterTest(unittest.TestCase):
                 }
             }
         }
-        self.assertTrue(should_spider_note_detail(note, detail_filter))
 
-    def test_should_skip_note_when_any_supported_count_is_out_of_range(self):
-        detail_filter = parse_detail_filter('{"like":[100,200],"comment":[0,20]}')
-        note = {
-            "note_card": {
-                "interact_info": {
-                    "liked_count": "99",
-                    "comment_count": "5",
-                }
-            }
-        }
-
-        self.assertFalse(should_spider_note_detail(note, detail_filter))
+        self.assertTrue(
+            should_spider_note_detail(
+                note,
+                cleaning_rules=[
+                    {
+                        "rule_type": "interaction",
+                        "interaction_match_mode": "dimension_count",
+                        "min_likes_count": 100,
+                        "max_likes_count": 200,
+                        "interaction_required_count": 1,
+                    },
+                    {
+                        "rule_type": "interaction",
+                        "interaction_match_mode": "total",
+                        "min_total_interactions": 100,
+                        "max_total_interactions": 200,
+                    },
+                ],
+            )
+        )
+        self.assertFalse(
+            should_spider_note_detail(
+                note,
+                cleaning_rules=[
+                    {
+                        "rule_type": "interaction",
+                        "interaction_match_mode": "dimension_count",
+                        "min_likes_count": 100,
+                        "max_likes_count": 200,
+                        "interaction_required_count": 1,
+                    },
+                    {
+                        "rule_type": "interaction",
+                        "interaction_match_mode": "total",
+                        "min_total_interactions": 200,
+                    },
+                ],
+            )
+        )
 
     @patch("main.save_to_db")
     def test_filtered_search_note_is_saved_to_db_without_fetching_detail(self, mock_save_to_db):
@@ -88,7 +139,15 @@ class DetailFilterTest(unittest.TestCase):
                 base_path={"db": {}},
                 save_choice="db",
                 crawl_task_id="task_1",
-                detail_filter=parse_detail_filter('{"like":[100,200]}'),
+                cleaning_rules=[
+                    {
+                        "rule_type": "interaction",
+                        "interaction_match_mode": "dimension_count",
+                        "min_likes_count": 100,
+                        "max_likes_count": 200,
+                        "interaction_required_count": 3,
+                    }
+                ],
             )
 
         self.assertTrue(success)

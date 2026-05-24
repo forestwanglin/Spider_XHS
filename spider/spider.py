@@ -1,62 +1,16 @@
-import json
 import os
 import argparse
+import json
 from datetime import datetime
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.common_util import init, load_env
-from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db, parse_count
-
-
-DETAIL_FILTER_FIELDS = {
-    'like': 'like',
-    'collect': 'collect',
-    'comment': 'comment',
-}
-
-
-def parse_detail_filter(detail_filter_json: str):
-    if not detail_filter_json:
-        return {}
-    try:
-        raw_filter = json.loads(detail_filter_json)
-    except json.JSONDecodeError as e:
-        raise ValueError(f'--detailFilter 不是合法 JSON: {e}') from e
-    if not isinstance(raw_filter, dict):
-        raise ValueError('--detailFilter 必须是 JSON 对象')
-
-    detail_filter = {}
-    for key, value in raw_filter.items():
-        if key == 'share':
-            logger.warning('列表页无法稳定拿到分享数，已忽略 detailFilter 中的分享条件')
-            continue
-        if key not in DETAIL_FILTER_FIELDS:
-            raise ValueError(f'--detailFilter 不支持字段 {key}，仅支持 like、collect、comment')
-        if not isinstance(value, list) or len(value) != 2:
-            raise ValueError(f'--detailFilter 字段 {key} 必须是 [最小值, 最大值]')
-        min_count = parse_count(value[0])
-        max_count = parse_count(value[1])
-        if min_count > max_count:
-            raise ValueError(f'--detailFilter 字段 {key} 的最小值不能大于最大值')
-        normalized_key = DETAIL_FILTER_FIELDS[key]
-        detail_filter[normalized_key] = (min_count, max_count)
-    return detail_filter
-
-
-def should_spider_note_detail(note: dict, detail_filter: dict):
-    if not detail_filter:
-        return True
-    interact_info = note.get('note_card', {}).get('interact_info', {}) or {}
-    count_fields = {
-        'like': 'liked_count',
-        'collect': 'collected_count',
-        'comment': 'comment_count',
-    }
-    for key, (min_count, max_count) in detail_filter.items():
-        count = parse_count(interact_info.get(count_fields[key]))
-        if count < min_count or count > max_count:
-            return False
-    return True
+from xhs_utils.cleaning_rule_filter import (
+    load_cleaning_rules_from_db,
+    parse_cleaning_rule_ids,
+    should_spider_note_detail,
+)
+from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db
 
 
 def build_db_record_from_search_note(note: dict):
@@ -151,7 +105,7 @@ class Data_Spider():
         logger.info(f'爬取用户所有视频 {user_url}: {success}, msg: {msg}')
         return note_list, success, msg
 
-    def spider_some_search_note(self, query: str, require_num: int, cookies_str: str, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', detail_filter: dict = None, proxies=None):
+    def spider_some_search_note(self, query: str, require_num: int, cookies_str: str, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', cleaning_rules: list = None, proxies=None):
         """
             指定数量搜索笔记，设置排序方式和笔记类型和笔记数量
             :param query 搜索的关键词
@@ -173,8 +127,8 @@ class Data_Spider():
                 notes = list(filter(lambda x: x['model_type'] == "note", notes))
                 logger.info(f'搜索关键词 {query} 笔记数量: {len(notes)}')
                 for note in notes:
-                    if not should_spider_note_detail(note, detail_filter):
-                        logger.info(f"跳过详情抓取 note_id={note.get('id')}，未命中 detailFilter")
+                    if not should_spider_note_detail(note, cleaning_rules):
+                        logger.info(f"跳过详情抓取 note_id={note.get('id')}，未命中详情过滤条件")
                         filtered_db_rows.append(build_db_record_from_search_note(note))
                         continue
                     note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
@@ -206,11 +160,10 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter,
         epilog='示例:\n'
                '  python -m spider.spider --query "榴莲"\n'
-               '  python -m spider.spider --query "榴莲" --num 20 --detailFilter \'{"like":[100,999999],"collect":[20,999999],"comment":[0,999999]}\'\n'
+               '  python -m spider.spider --query "榴莲" --cleaningRuleIds 1,2,3\n'
                '  python -m spider.spider --validate-cookies --cookies "a1=...; web_session=..."\n'
                '说明:\n'
-               '  使用 -h 或 --help 打印所有可用参数和描述。\n'
-               '  列表页无法稳定拿到分享数，detailFilter 中的 share 会被忽略。'
+               '  使用 -h 或 --help 打印所有可用参数和描述。'
     )
     parser.add_argument('--query', required=False, default='', help='搜索关键词；普通抓取时必填')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
@@ -218,15 +171,16 @@ if __name__ == '__main__':
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
     parser.add_argument('--validate-cookies', action='store_true', help='只校验当前 cookies 是否有效；开启后必须显式传 --cookies')
     parser.add_argument(
-        '--detailFilter',
+        '--cleaningRuleIds',
+        '--filterRuleIds',
         required=False,
         default='',
-        help='详情抓取前置过滤 JSON，可选；仅支持 like/collect/comment 区间，示例: \'{"like":[100,999999],"collect":[20,999999],"comment":[0,999999]}\''
+        help='清洗/过滤规则 ID 列表，可选；多个 ID 用英文或中文逗号分隔，例如: 1,2,3'
     )
     args = parser.parse_args()
-    detail_filter = parse_detail_filter(args.detailFilter)
+    cleaning_rule_ids = parse_cleaning_rule_ids(args.cleaningRuleIds)
 
-    env_cookies_str, _, _ = load_env()
+    env_cookies_str, _, db_config = load_env()
     explicit_cookie = args.cookies.strip() if args.cookies and args.cookies.strip() else ''
     if args.validate_cookies:
         if not explicit_cookie:
@@ -263,6 +217,7 @@ if __name__ == '__main__':
 
     # 3 搜索指定关键词的笔记
     query = args.query.strip()
+    cleaning_rules = load_cleaning_rules_from_db(cleaning_rule_ids, db_config)
     query_num = args.num
     sort_type_choice = 0  # 0 综合排序, 1 最新, 2 最多点赞, 3 最多评论, 4 最多收藏
     note_type = 0 # 0 不限, 1 视频笔记, 2 普通笔记
@@ -274,4 +229,4 @@ if __name__ == '__main__':
     #     "latitude": 39.9725,
     #     "longitude": 116.4207
     # }
-    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'all', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, detail_filter=detail_filter)
+    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'all', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, cleaning_rules=cleaning_rules)
