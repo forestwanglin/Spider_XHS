@@ -45,7 +45,9 @@ def get_ai_allowed_note_ids(notes: list):
         return set()
 
     try:
+        logger.info(f"AI_TITLE_FILTER_REQUEST_BODY={json.dumps(title_map, ensure_ascii=False)}")
         results = filter_titles(title_map)
+        logger.info(f"AI_TITLE_FILTER_RESPONSE_DATA={json.dumps(results or [], ensure_ascii=False)}")
     except Exception as e:
         logger.error(f"AI 标题过滤异常，跳过本批详情抓取: {e}")
         return set()

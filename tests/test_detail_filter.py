@@ -129,8 +129,9 @@ class DetailFilterTest(unittest.TestCase):
         )
 
     @patch("main.save_to_db")
+    @patch("main.logger.info")
     @patch("main.filter_titles", create=True)
-    def test_ai_title_and_cleaning_rules_must_match_before_detail_crawl(self, mock_filter_titles, mock_save_to_db):
+    def test_ai_title_and_cleaning_rules_must_match_before_detail_crawl(self, mock_filter_titles, mock_logger_info, mock_save_to_db):
         spider = Data_Spider()
         spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note()]))
         mock_filter_titles.return_value = [{"input_key": "note_1", "total_score": 80}]
@@ -160,6 +161,9 @@ class DetailFilterTest(unittest.TestCase):
             ["https://www.xiaohongshu.com/explore/note_1?xsec_token=token_note_1"],
         )
         mock_filter_titles.assert_called_once_with({"note_1": "title"})
+        log_messages = [call.args[0] for call in mock_logger_info.call_args_list]
+        self.assertTrue(any("AI_TITLE_FILTER_REQUEST_BODY" in msg and '"note_1": "title"' in msg for msg in log_messages))
+        self.assertTrue(any("AI_TITLE_FILTER_RESPONSE_DATA" in msg and '"input_key": "note_1"' in msg for msg in log_messages))
         mock_spider_note.assert_called_once()
         mock_save_to_db.assert_called_once()
 
