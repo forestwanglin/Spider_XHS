@@ -10,8 +10,7 @@ os.environ["HTTPS_PROXY"] = ""
 os.environ["ALL_PROXY"] = ""
 os.environ["NO_PROXY"] = "*"
 
-from openai import OpenAI, APIError, RateLimitError, APITimeoutError
-from ..prompt import XHS_FILTER_PROMPT
+from .prompt import XHS_FILTER_PROMPT
 
 # ========== 1. 日志配置 ==========
 logging.basicConfig(
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # ========== 2. 配置常量 ==========
 class Config:
-    API_KEY = os.getenv("DEEPSEEK_API_KEY", "sk-e3696493c76e46d3bd97128a7a69b698")
+    API_KEY = os.getenv("DEEPSEEK_API_KEY")
     BASE_URL = "https://api.deepseek.com"
     MODEL = "deepseek-v4-flash"
     TEMPERATURE = 0.0  # 规则执行必须 deterministic
@@ -53,8 +52,19 @@ def call_deepseek(
     Returns:
         模型返回的 JSON 字符串，失败时返回 None
     """
+    api_key = os.getenv("DEEPSEEK_API_KEY") or config.API_KEY
+    if not api_key:
+        logger.error("DEEPSEEK_API_KEY 未配置，跳过标题过滤")
+        return None
+
+    try:
+        from openai import OpenAI, APIError, RateLimitError, APITimeoutError
+    except ImportError as e:
+        logger.error(f"openai 依赖未安装，跳过标题过滤: {e}")
+        return None
+
     client = OpenAI(
-        api_key=config.API_KEY,
+        api_key=api_key,
         base_url=config.BASE_URL,
         timeout=config.TIMEOUT
     )
@@ -224,4 +234,3 @@ if __name__ == "__main__":
     with open("filter_result.json", "w", encoding="utf-8") as f:
         json.dump(result_json, f, ensure_ascii=False, indent=2)
     logger.info("结果已保存到 filter_result.json")
-

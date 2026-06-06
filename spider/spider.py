@@ -11,6 +11,7 @@ from xhs_utils.cleaning_rule_filter import (
     should_spider_note_detail,
 )
 from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db
+from title_filter_code import filter_titles
 
 
 def build_db_record_from_search_note(note: dict):
@@ -25,6 +26,46 @@ def build_db_record_from_search_note(note: dict):
         'note_url': note_url,
         'raw_data': json.dumps(raw_note, ensure_ascii=False),
     }
+
+
+def build_title_filter_input(notes: list):
+    title_map = {}
+    for note in notes:
+        note_id = note.get('id')
+        if not note_id:
+            continue
+        note_card = note.get('note_card') or {}
+        title_map[note_id] = note_card.get('title') or ''
+    return title_map
+
+
+def get_ai_allowed_note_ids(notes: list):
+    title_map = build_title_filter_input(notes)
+    if not title_map:
+        return set()
+
+    try:
+        results = filter_titles(title_map)
+    except Exception as e:
+        logger.error(f"AI 标题过滤异常，跳过本批详情抓取: {e}")
+        return set()
+
+    allowed_note_ids = {
+        str(item.get('input_key'))
+        for item in results or []
+        if item.get('input_key')
+    }
+    logger.info(f"AI 标题过滤命中数量: {len(allowed_note_ids)}/{len(title_map)}")
+    return allowed_note_ids
+
+
+def build_skip_detail_reason(ai_matched: bool, rule_matched: bool):
+    reasons = []
+    if not ai_matched:
+        reasons.append("AI_TITLE_FILTER_NOT_MATCHED")
+    if not rule_matched:
+        reasons.append("CLEANING_RULE_NOT_MATCHED")
+    return ",".join(reasons)
 
 
 class Data_Spider():
@@ -126,9 +167,14 @@ class Data_Spider():
             if success:
                 notes = list(filter(lambda x: x['model_type'] == "note", notes))
                 logger.info(f'搜索关键词 {query} 笔记数量: {len(notes)}')
+                allowed_note_ids = get_ai_allowed_note_ids(notes)
                 for note in notes:
-                    if not should_spider_note_detail(note, cleaning_rules):
-                        logger.info(f"跳过详情抓取 note_id={note.get('id')}，未命中详情过滤条件")
+                    note_id = note.get('id')
+                    ai_matched = note_id in allowed_note_ids
+                    rule_matched = should_spider_note_detail(note, cleaning_rules)
+                    if not (ai_matched and rule_matched):
+                        reason = build_skip_detail_reason(ai_matched, rule_matched)
+                        logger.info(f"跳过详情抓取 note_id={note_id}，reason={reason}")
                         filtered_db_rows.append(build_db_record_from_search_note(note))
                         continue
                     note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
