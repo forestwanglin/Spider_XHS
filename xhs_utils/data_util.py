@@ -46,6 +46,17 @@ def parse_count(value):
     except (TypeError, ValueError):
         return 0
 
+
+def parse_flag(value):
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)):
+        return 1 if int(value) else 0
+    if value is None:
+        return 0
+    text = str(value).strip().lower()
+    return 1 if text in {'1', 'true', 'yes', 'y', 'on'} else 0
+
 def handle_user_info(data, user_id):
     home_url = f'https://www.xiaohongshu.com/user/profile/{user_id}'
     nickname = data['basic_info']['nickname']
@@ -336,6 +347,9 @@ def save_to_db(datas, db_config, crawl_task_id=''):
                 parse_count(row_data.get('collected_count')),
                 parse_count(row_data.get('comment_count')),
                 parse_count(row_data.get('share_count')),
+                parse_flag(row_data.get('ai_title_filter_passed')),
+                parse_flag(row_data.get('cleaning_rule_passed')),
+                parse_flag(row_data.get('detail_crawl_succeeded')),
             ))
         if rows:
             with conn.cursor() as cursor:
@@ -375,8 +389,9 @@ def save_to_db(datas, db_config, crawl_task_id=''):
                     cursor.executemany(
                     '''
                     INSERT INTO spider_xhs_note_snapshot (
-                        crawl_task_id, crawl_time, note_id, liked_count, collected_count, comment_count, share_count
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        crawl_task_id, crawl_time, note_id, liked_count, collected_count, comment_count, share_count,
+                        ai_title_filter_passed, cleaning_rule_passed, detail_crawl_succeeded
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ''',
                     snapshot_rows,
                     )

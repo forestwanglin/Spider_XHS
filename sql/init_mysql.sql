@@ -44,9 +44,18 @@ CREATE TABLE IF NOT EXISTS spider_xhs_note_snapshot (
   collected_count INT DEFAULT 0,
   comment_count INT DEFAULT 0,
   share_count INT DEFAULT 0,
+  ai_title_filter_passed TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否通过AI标题过滤',
+  cleaning_rule_passed TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否通过清洗规则',
+  detail_crawl_succeeded TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否详情抓取成功',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_crawl_task_id (crawl_task_id),
   KEY idx_note_id (note_id),
-  KEY idx_crawl_time (crawl_time)
+  KEY idx_crawl_time (crawl_time),
+  KEY idx_xhs_note_snapshot_task_flags (
+    crawl_task_id,
+    ai_title_filter_passed,
+    cleaning_rule_passed,
+    detail_crawl_succeeded
+  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

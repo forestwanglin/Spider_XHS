@@ -1,7 +1,7 @@
 import subprocess
 import sys
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 from main import (
     Data_Spider,
@@ -9,6 +9,7 @@ from main import (
     parse_cleaning_rule_ids,
     should_spider_note_detail,
 )
+from xhs_utils.data_util import save_to_db
 
 
 class DetailFilterTest(unittest.TestCase):
@@ -196,6 +197,47 @@ class DetailFilterTest(unittest.TestCase):
 
     @patch("main.save_to_db")
     @patch("main.filter_titles", create=True)
+    def test_detail_failure_falls_back_to_search_record_with_snapshot_flags(self, mock_filter_titles, mock_save_to_db):
+        spider = Data_Spider()
+        spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note()]))
+        mock_filter_titles.return_value = [{"input_key": "note_1", "total_score": 80}]
+
+        with patch.object(spider, "spider_note") as mock_spider_note:
+            mock_spider_note.return_value = (False, "detail failed", None)
+            note_list, success, _ = spider.spider_some_search_note(
+                query="test",
+                require_num=20,
+                cookies_str="cookie",
+                base_path={"db": {}},
+                save_choice="db",
+                crawl_task_id="task_1",
+                cleaning_rules=[
+                    {
+                        "rule_type": "interaction",
+                        "interaction_match_mode": "dimension_count",
+                        "min_likes_count": 100,
+                        "max_likes_count": 200,
+                        "interaction_required_count": 3,
+                    }
+                ],
+            )
+
+        self.assertTrue(success)
+        self.assertEqual(
+            note_list,
+            ["https://www.xiaohongshu.com/explore/note_1?xsec_token=token_note_1"],
+        )
+        mock_spider_note.assert_called_once()
+        mock_save_to_db.assert_called_once()
+        saved_rows = mock_save_to_db.call_args.args[0]
+        self.assertEqual(len(saved_rows), 1)
+        self.assertEqual(saved_rows[0]["note_id"], "note_1")
+        self.assertTrue(saved_rows[0]["ai_title_filter_passed"])
+        self.assertTrue(saved_rows[0]["cleaning_rule_passed"])
+        self.assertFalse(saved_rows[0]["detail_crawl_succeeded"])
+
+    @patch("main.save_to_db")
+    @patch("main.filter_titles", create=True)
     def test_cleaning_rule_filtered_search_note_is_saved_to_db_without_fetching_detail(self, mock_filter_titles, mock_save_to_db):
         spider = Data_Spider()
         spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note(liked_count="50")]))
@@ -277,6 +319,38 @@ class DetailFilterTest(unittest.TestCase):
         mock_filter_titles.assert_called_once_with({"note_1": ""})
         mock_spider_note.assert_not_called()
         mock_save_to_db.assert_called_once()
+
+    @patch("xhs_utils.data_util.pymysql.connect")
+    def test_save_to_db_writes_snapshot_filter_and_detail_flags(self, mock_connect):
+        cursor = Mock()
+        connection = Mock()
+        connection.cursor.return_value = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        mock_connect.return_value = connection
+
+        save_to_db(
+            [
+                {
+                    "note_id": "note_1",
+                    "note_url": "https://www.xiaohongshu.com/explore/note_1",
+                    "liked_count": "120",
+                    "collected_count": "20",
+                    "comment_count": "5",
+                    "share_count": "1",
+                    "ai_title_filter_passed": True,
+                    "cleaning_rule_passed": False,
+                    "detail_crawl_succeeded": False,
+                }
+            ],
+            {"host": "127.0.0.1", "port": 3306, "user": "u", "password": "p", "database": "d"},
+            crawl_task_id="task_1",
+        )
+
+        snapshot_sql, snapshot_rows = cursor.executemany.call_args_list[1].args
+        self.assertIn("ai_title_filter_passed", snapshot_sql)
+        self.assertIn("cleaning_rule_passed", snapshot_sql)
+        self.assertIn("detail_crawl_succeeded", snapshot_sql)
+        self.assertEqual(snapshot_rows[0], ("task_1", ANY, "note_1", 120, 20, 5, 1, 1, 0, 0))
 
 
 if __name__ == "__main__":

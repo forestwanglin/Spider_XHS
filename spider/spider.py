@@ -14,7 +14,13 @@ from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, s
 from title_filter_code import filter_titles
 
 
-def build_db_record_from_search_note(note: dict):
+def build_db_record_from_search_note(
+    note: dict,
+    *,
+    ai_title_filter_passed: bool = False,
+    cleaning_rule_passed: bool = False,
+    detail_crawl_succeeded: bool = False,
+):
     note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
     raw_note = {
         'id': note['id'],
@@ -25,6 +31,9 @@ def build_db_record_from_search_note(note: dict):
         'note_id': note['id'],
         'note_url': note_url,
         'raw_data': json.dumps(raw_note, ensure_ascii=False),
+        'ai_title_filter_passed': ai_title_filter_passed,
+        'cleaning_rule_passed': cleaning_rule_passed,
+        'detail_crawl_succeeded': detail_crawl_succeeded,
     }
 
 
@@ -95,7 +104,19 @@ class Data_Spider():
         logger.info(f'爬取笔记信息 {note_url}: {success}, msg: {msg}')
         return success, msg, note_info
 
-    def spider_some_note(self, notes: list, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None, extra_db_rows: list = None):
+    def spider_some_note(
+        self,
+        notes: list,
+        cookies_str: str,
+        base_path: dict,
+        save_choice: str,
+        excel_name: str = '',
+        crawl_task_id: str = '',
+        proxies=None,
+        extra_db_rows: list = None,
+        detail_success_flags: dict = None,
+        fallback_db_rows_by_url: dict = None,
+    ):
         """
         爬取一些笔记的信息
         :param notes:
@@ -106,10 +127,16 @@ class Data_Spider():
         if (save_choice == 'all' or save_choice == 'excel') and excel_name == '':
             raise ValueError('excel_name 不能为空')
         note_list = []
+        fallback_rows = []
+        detail_success_flags = detail_success_flags or {}
+        fallback_db_rows_by_url = fallback_db_rows_by_url or {}
         for note_url in notes:
             success, msg, note_info = self.spider_note(note_url, cookies_str, proxies)
             if note_info is not None and success:
+                note_info.update(detail_success_flags)
                 note_list.append(note_info)
+            elif note_url in fallback_db_rows_by_url:
+                fallback_rows.append(fallback_db_rows_by_url[note_url])
         for note_info in note_list:
             if save_choice == 'all' or 'media' in save_choice:
                 download_note(note_info, base_path['media'], save_choice)
@@ -120,6 +147,8 @@ class Data_Spider():
             db_rows = list(note_list)
             if extra_db_rows:
                 db_rows.extend(extra_db_rows)
+            if fallback_rows:
+                db_rows.extend(fallback_rows)
             save_to_db(db_rows, base_path['db'], crawl_task_id)
 
 
@@ -164,6 +193,7 @@ class Data_Spider():
         """
         note_list = []
         filtered_db_rows = []
+        fallback_db_rows_by_url = {}
         try:
             success, msg, notes = self.xhs_apis.search_some_note(query, require_num, cookies_str, sort_type_choice, note_type, note_time, note_range, pos_distance, geo, proxies)
             if success:
@@ -177,13 +207,41 @@ class Data_Spider():
                     if not (ai_matched and rule_matched):
                         reason = build_skip_detail_reason(ai_matched, rule_matched)
                         logger.info(f"跳过详情抓取 note_id={note_id}，reason={reason}")
-                        filtered_db_rows.append(build_db_record_from_search_note(note))
+                        filtered_db_rows.append(
+                            build_db_record_from_search_note(
+                                note,
+                                ai_title_filter_passed=ai_matched,
+                                cleaning_rule_passed=rule_matched,
+                                detail_crawl_succeeded=False,
+                            )
+                        )
                         continue
                     note_url = f"https://www.xiaohongshu.com/explore/{note['id']}?xsec_token={note['xsec_token']}"
                     note_list.append(note_url)
+                    fallback_db_rows_by_url[note_url] = build_db_record_from_search_note(
+                        note,
+                        ai_title_filter_passed=True,
+                        cleaning_rule_passed=True,
+                        detail_crawl_succeeded=False,
+                    )
             if save_choice == 'all' or save_choice == 'excel':
                 excel_name = query
-            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, crawl_task_id, proxies, extra_db_rows=filtered_db_rows)
+            self.spider_some_note(
+                note_list,
+                cookies_str,
+                base_path,
+                save_choice,
+                excel_name,
+                crawl_task_id,
+                proxies,
+                extra_db_rows=filtered_db_rows,
+                detail_success_flags={
+                    'ai_title_filter_passed': True,
+                    'cleaning_rule_passed': True,
+                    'detail_crawl_succeeded': True,
+                },
+                fallback_db_rows_by_url=fallback_db_rows_by_url,
+            )
         except Exception as e:
             success = False
             msg = e
