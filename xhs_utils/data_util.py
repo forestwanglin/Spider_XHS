@@ -286,7 +286,7 @@ def save_to_db(datas, db_config, crawl_task_id=''):
                 'home_url': f"https://www.xiaohongshu.com/user/profile/{user.get('user_id')}" if user.get('user_id') else '',
                 'nickname': user.get('nickname'),
                 'avatar': user.get('avatar'),
-                'title': note_card.get('title'),
+                'title': note_card.get('title') or note_card.get('display_title'),
                 'desc': note_card.get('desc'),
                 'liked_count': interact_info.get('liked_count'),
                 'collected_count': interact_info.get('collected_count'),

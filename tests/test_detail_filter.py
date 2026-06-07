@@ -1,10 +1,14 @@
+import ast
+import json
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import ANY, MagicMock, Mock, patch
 
 from main import (
     Data_Spider,
+    build_title_filter_input,
     load_cleaning_rules_from_db,
     parse_cleaning_rule_ids,
     should_spider_note_detail,
@@ -58,8 +62,30 @@ class DetailFilterTest(unittest.TestCase):
         self.assertNotIn("detail" + "Filter", result.stdout)
         self.assertIn("cleaningRuleIds", result.stdout)
 
+    def test_cli_search_entrypoint_defaults_to_db_save_choice(self):
+        source = Path("spider/spider.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "spider_some_search_note"
+        ]
+
+        self.assertEqual(len(calls), 1)
+        self.assertGreaterEqual(len(calls[0].args), 5)
+        self.assertEqual(calls[0].args[4].value, "db")
+
     def test_parse_cleaning_rule_ids_deduplicates_comma_separated_values(self):
         self.assertEqual(parse_cleaning_rule_ids(" 3,2，3,,1 "), [3, 2, 1])
+
+    def test_title_filter_input_uses_search_display_title_when_title_missing(self):
+        note = self.build_search_note()
+        note["note_card"].pop("title")
+        note["note_card"]["display_title"] = "搜索列表标题"
+
+        self.assertEqual(build_title_filter_input([note]), {"note_1": "搜索列表标题"})
 
     @patch("xhs_utils.cleaning_rule_filter.pymysql.connect")
     def test_load_cleaning_rules_from_db_keeps_requested_order(self, mock_connect):
@@ -320,6 +346,32 @@ class DetailFilterTest(unittest.TestCase):
         mock_spider_note.assert_not_called()
         mock_save_to_db.assert_called_once()
 
+    @patch("main.save_to_db")
+    @patch("main.filter_titles", create=True)
+    def test_search_display_title_is_sent_to_ai_filter_when_title_missing(self, mock_filter_titles, mock_save_to_db):
+        spider = Data_Spider()
+        note = self.build_search_note()
+        note["note_card"].pop("title")
+        note["note_card"]["display_title"] = "搜索列表标题"
+        spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [note]))
+        mock_filter_titles.return_value = []
+
+        with patch.object(spider, "spider_note") as mock_spider_note:
+            note_list, success, _ = spider.spider_some_search_note(
+                query="test",
+                require_num=20,
+                cookies_str="cookie",
+                base_path={"db": {}},
+                save_choice="db",
+                crawl_task_id="task_1",
+            )
+
+        self.assertTrue(success)
+        self.assertEqual(note_list, [])
+        mock_filter_titles.assert_called_once_with({"note_1": "搜索列表标题"})
+        mock_spider_note.assert_not_called()
+        mock_save_to_db.assert_called_once()
+
     @patch("xhs_utils.data_util.pymysql.connect")
     def test_save_to_db_writes_snapshot_filter_and_detail_flags(self, mock_connect):
         cursor = Mock()
@@ -351,6 +403,34 @@ class DetailFilterTest(unittest.TestCase):
         self.assertIn("cleaning_rule_passed", snapshot_sql)
         self.assertIn("detail_crawl_succeeded", snapshot_sql)
         self.assertEqual(snapshot_rows[0], ("task_1", ANY, "note_1", 120, 20, 5, 1, 1, 0, 0))
+
+    @patch("xhs_utils.data_util.pymysql.connect")
+    def test_save_to_db_uses_search_display_title_from_raw_data_when_title_missing(self, mock_connect):
+        cursor = Mock()
+        connection = Mock()
+        connection.cursor.return_value = MagicMock()
+        connection.cursor.return_value.__enter__.return_value = cursor
+        mock_connect.return_value = connection
+
+        raw_note = self.build_search_note()
+        raw_note["url"] = "https://www.xiaohongshu.com/explore/note_1"
+        raw_note["note_card"].pop("title")
+        raw_note["note_card"]["display_title"] = "搜索列表标题"
+
+        save_to_db(
+            [
+                {
+                    "note_id": "note_1",
+                    "note_url": "https://www.xiaohongshu.com/explore/note_1",
+                    "raw_data": json.dumps(raw_note, ensure_ascii=False),
+                }
+            ],
+            {"host": "127.0.0.1", "port": 3306, "user": "u", "password": "p", "database": "d"},
+            crawl_task_id="task_1",
+        )
+
+        _, note_rows = cursor.executemany.call_args_list[0].args
+        self.assertEqual(note_rows[0][7], "搜索列表标题")
 
 
 if __name__ == "__main__":

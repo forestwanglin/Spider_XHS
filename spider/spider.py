@@ -44,7 +44,7 @@ def build_title_filter_input(notes: list):
         if not note_id:
             continue
         note_card = note.get('note_card') or {}
-        title_map[note_id] = note_card.get('title') or ''
+        title_map[note_id] = note_card.get('title') or note_card.get('display_title') or ''
     return title_map
 
 
@@ -335,4 +335,4 @@ if __name__ == '__main__':
     #     "latitude": 39.9725,
     #     "longitude": 116.4207
     # }
-    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'all', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, cleaning_rules=cleaning_rules)
+    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'db', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, cleaning_rules=cleaning_rules)
