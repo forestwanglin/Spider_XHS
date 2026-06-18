@@ -1,3 +1,3 @@
-from .filter import filter_titles
+from .filter import filter_titles, is_title_filter_available
 
-__all__ = ["filter_titles"]
+__all__ = ["filter_titles", "is_title_filter_available"]

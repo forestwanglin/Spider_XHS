@@ -482,10 +482,12 @@ def download_note(note_info, path, save_choice):
         f.write(json.dumps(note_info) + '\n')
     note_type = note_info['note_type']
     save_note_detail(note_info, save_path)
-    if note_type == '图集' and save_choice in ['media', 'media-image', 'all']:
+    image_save_choices = ['media', 'media-image', 'all', 'media-db']
+    video_save_choices = ['media', 'media-video', 'all', 'media-db']
+    if note_type == '图集' and save_choice in image_save_choices:
         for img_index, img_url in enumerate(note_info['image_list']):
             download_media(save_path, f'image_{img_index}', img_url, 'image')
-    elif note_type == '视频' and save_choice in ['media', 'media-video', 'all']:
+    elif note_type == '视频' and save_choice in video_save_choices:
         if note_info.get('video_cover'):
             download_media(save_path, 'cover', note_info['video_cover'], 'image')
         else:

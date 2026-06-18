@@ -11,7 +11,28 @@ from xhs_utils.cleaning_rule_filter import (
     should_spider_note_detail,
 )
 from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db
-from title_filter_code import filter_titles
+from title_filter_code import filter_titles, is_title_filter_available
+
+
+SAVE_CHOICE_ALL = 'all'
+SAVE_CHOICE_DB = 'db'
+SAVE_CHOICE_EXCEL = 'excel'
+SAVE_CHOICE_MEDIA_DB = 'media-db'
+SAVE_CHOICES_WITH_MEDIA = {SAVE_CHOICE_ALL, 'media', 'media-image', 'media-video', SAVE_CHOICE_MEDIA_DB}
+SAVE_CHOICES_WITH_DB = {SAVE_CHOICE_ALL, SAVE_CHOICE_DB, SAVE_CHOICE_MEDIA_DB}
+SAVE_CHOICES_WITH_EXCEL = {SAVE_CHOICE_ALL, SAVE_CHOICE_EXCEL}
+
+
+def should_save_media(save_choice: str) -> bool:
+    return save_choice in SAVE_CHOICES_WITH_MEDIA
+
+
+def should_save_db(save_choice: str) -> bool:
+    return save_choice in SAVE_CHOICES_WITH_DB
+
+
+def should_save_excel(save_choice: str) -> bool:
+    return save_choice in SAVE_CHOICES_WITH_EXCEL
 
 
 def build_db_record_from_search_note(
@@ -51,7 +72,12 @@ def build_title_filter_input(notes: list):
 def get_ai_allowed_note_ids(notes: list):
     title_map = build_title_filter_input(notes)
     if not title_map:
-        return set()
+        logger.info("AI 标题过滤输入为空，按全部通过处理")
+        return None
+
+    if not is_title_filter_available():
+        logger.info("AI 标题过滤不可用，按全部通过处理")
+        return None
 
     try:
         logger.info(f"AI_TITLE_FILTER_REQUEST_BODY={json.dumps(title_map, ensure_ascii=False)}")
@@ -68,6 +94,10 @@ def get_ai_allowed_note_ids(notes: list):
     }
     logger.info(f"AI 标题过滤命中数量: {len(allowed_note_ids)}/{len(title_map)}")
     return allowed_note_ids
+
+
+def is_ai_title_matched(note_id, allowed_note_ids) -> bool:
+    return allowed_note_ids is None or str(note_id) in allowed_note_ids
 
 
 def build_skip_detail_reason(ai_matched: bool, rule_matched: bool):
@@ -128,7 +158,7 @@ class Data_Spider():
         :param base_path:
         :return:
         """
-        if (save_choice == 'all' or save_choice == 'excel') and excel_name == '':
+        if should_save_excel(save_choice) and excel_name == '':
             raise ValueError('excel_name 不能为空')
         note_list = []
         fallback_rows = []
@@ -142,12 +172,12 @@ class Data_Spider():
             elif note_url in fallback_db_rows_by_url:
                 fallback_rows.append(fallback_db_rows_by_url[note_url])
         for note_info in note_list:
-            if save_choice == 'all' or 'media' in save_choice:
+            if should_save_media(save_choice):
                 download_note(note_info, base_path['media'], save_choice)
-        if save_choice == 'all' or save_choice == 'excel':
+        if should_save_excel(save_choice):
             file_path = os.path.abspath(os.path.join(base_path['excel'], f'{excel_name}.xlsx'))
             save_to_xlsx(note_list, file_path)
-        if save_choice == 'all' or save_choice == 'db':
+        if should_save_db(save_choice):
             db_rows = list(note_list)
             if extra_db_rows:
                 db_rows.extend(extra_db_rows)
@@ -174,7 +204,7 @@ class Data_Spider():
                 for simple_note_info in all_note_info:
                     note_url = f"https://www.xiaohongshu.com/explore/{simple_note_info['note_id']}?xsec_token={simple_note_info['xsec_token']}"
                     note_list.append(note_url)
-            if save_choice == 'all' or save_choice == 'excel':
+            if should_save_excel(save_choice):
                 excel_name = user_url.split('/')[-1].split('?')[0]
             self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, crawl_task_id, proxies)
         except Exception as e:
@@ -208,7 +238,7 @@ class Data_Spider():
                 allowed_note_ids = get_ai_allowed_note_ids(notes)
                 for note in notes:
                     note_id = note.get('id')
-                    ai_matched = note_id in allowed_note_ids
+                    ai_matched = is_ai_title_matched(note_id, allowed_note_ids)
                     rule_matched = should_spider_note_detail(note, cleaning_rules)
                     if not (ai_matched and rule_matched):
                         reason = build_skip_detail_reason(ai_matched, rule_matched)
@@ -230,7 +260,7 @@ class Data_Spider():
                         cleaning_rule_passed=True,
                         detail_crawl_succeeded=False,
                     )
-            if save_choice == 'all' or save_choice == 'excel':
+            if should_save_excel(save_choice):
                 excel_name = query
             self.spider_some_note(
                 note_list,
@@ -312,7 +342,7 @@ if __name__ == '__main__':
     data_spider = Data_Spider()
     crawl_task_id = args.taskId.strip() if args.taskId and args.taskId.strip() else datetime.now().strftime('%Y%m%d_%H%M%S')
     """
-        save_choice: all: 保存所有的信息（media + excel + db）, media: 保存视频和图片（media-video只下载视频, media-image只下载图片，media都下载）, excel: 保存到excel, db: 保存到mysql
+        save_choice: all: 保存所有的信息（media + excel + db）, media: 保存视频和图片（media-video只下载视频, media-image只下载图片，media都下载）, excel: 保存到excel, db: 保存到mysql, media-db: 保存媒体和mysql
         save_choice 为 excel 或者 all 时，excel_name 不能为空
     """
 
@@ -328,7 +358,7 @@ if __name__ == '__main__':
 
     note_url = args.noteUrl.strip() if args.noteUrl and args.noteUrl.strip() else ''
     if note_url:
-        saved_count = data_spider.spider_some_note([note_url], cookies_str, base_path, 'db', crawl_task_id=crawl_task_id)
+        saved_count = data_spider.spider_some_note([note_url], cookies_str, base_path, SAVE_CHOICE_MEDIA_DB, crawl_task_id=crawl_task_id)
         raise SystemExit(0 if saved_count > 0 else 1)
 
     if not args.query or not args.query.strip():
@@ -349,4 +379,4 @@ if __name__ == '__main__':
     #     "latitude": 39.9725,
     #     "longitude": 116.4207
     # }
-    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, 'db', sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, cleaning_rules=cleaning_rules)
+    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, SAVE_CHOICE_MEDIA_DB, sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, cleaning_rules=cleaning_rules)

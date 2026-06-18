@@ -32,6 +32,20 @@ class Config:
     MAX_RETRIES = 3  # 最大重试次数
     RETRY_DELAY = 2  # 重试间隔秒数
 
+def is_title_filter_available(config: Config = Config) -> bool:
+    api_key = os.getenv("DEEPSEEK_API_KEY") or config.API_KEY
+    if not api_key:
+        logger.info("DEEPSEEK_API_KEY 未配置，AI 标题过滤不可用")
+        return False
+
+    try:
+        import openai  # noqa: F401
+    except ImportError as e:
+        logger.info(f"openai 依赖未安装，AI 标题过滤不可用: {e}")
+        return False
+
+    return True
+
 # ========== 3. Prompt 构建 ==========
 def build_prompt(titles: List[str]) -> str:
     """将标题列表注入提示词模板"""

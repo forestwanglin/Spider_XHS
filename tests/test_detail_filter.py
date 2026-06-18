@@ -2,6 +2,7 @@ import ast
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, Mock, patch
@@ -13,7 +14,7 @@ from main import (
     parse_cleaning_rule_ids,
     should_spider_note_detail,
 )
-from xhs_utils.data_util import save_to_db
+from xhs_utils.data_util import download_note, save_to_db
 
 
 class DetailFilterTest(unittest.TestCase):
@@ -51,6 +52,36 @@ class DetailFilterTest(unittest.TestCase):
             },
         }
 
+    def build_detail_note(
+        self,
+        note_id="note_1",
+        note_type="图集",
+        image_list=None,
+        video_cover="",
+        video_addr="",
+    ):
+        return {
+            "note_id": note_id,
+            "note_url": f"https://www.xiaohongshu.com/explore/{note_id}",
+            "note_type": note_type,
+            "user_id": "user_1",
+            "home_url": "https://www.xiaohongshu.com/user/profile/user_1",
+            "nickname": "tester",
+            "avatar": "https://img/avatar.jpg",
+            "title": "title",
+            "desc": "desc",
+            "liked_count": "120",
+            "collected_count": "20",
+            "comment_count": "5",
+            "share_count": "1",
+            "video_cover": video_cover,
+            "video_addr": video_addr,
+            "image_list": image_list or [],
+            "tags": [],
+            "upload_time": "2024-05-04 00:00:00",
+            "ip_location": "Shanghai",
+        }
+
     def test_cli_help_only_exposes_cleaning_rule_filter(self):
         result = subprocess.run(
             [sys.executable, "-m", "spider.spider", "--help"],
@@ -62,7 +93,7 @@ class DetailFilterTest(unittest.TestCase):
         self.assertNotIn("detail" + "Filter", result.stdout)
         self.assertIn("cleaningRuleIds", result.stdout)
 
-    def test_cli_search_entrypoint_defaults_to_db_save_choice(self):
+    def test_cli_search_entrypoint_defaults_to_media_db_save_choice(self):
         source = Path("spider/spider.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
         calls = [
@@ -75,9 +106,10 @@ class DetailFilterTest(unittest.TestCase):
 
         self.assertEqual(len(calls), 1)
         self.assertGreaterEqual(len(calls[0].args), 5)
-        self.assertEqual(calls[0].args[4].value, "db")
+        self.assertIsInstance(calls[0].args[4], ast.Name)
+        self.assertEqual(calls[0].args[4].id, "SAVE_CHOICE_MEDIA_DB")
 
-    def test_cli_note_url_entrypoint_uses_spider_some_note_db_save_choice(self):
+    def test_cli_note_url_entrypoint_uses_spider_some_note_media_db_save_choice(self):
         source = Path("spider/spider.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
         calls = [
@@ -92,8 +124,8 @@ class DetailFilterTest(unittest.TestCase):
             call
             for call in calls
             if len(call.args) >= 4
-            and isinstance(call.args[3], ast.Constant)
-            and call.args[3].value == "db"
+            and isinstance(call.args[3], ast.Name)
+            and call.args[3].id == "SAVE_CHOICE_MEDIA_DB"
         ]
 
         self.assertEqual(len(db_calls), 1)
@@ -159,6 +191,48 @@ class DetailFilterTest(unittest.TestCase):
 
         self.assertEqual(saved_count, 0)
         mock_save_to_db.assert_called_once_with([], {}, "task_1")
+
+    @patch("main.save_to_db")
+    @patch("main.download_note")
+    def test_spider_some_note_media_db_downloads_media_and_saves_db(self, mock_download_note, mock_save_to_db):
+        spider = Data_Spider()
+        note_info = {"note_id": "note_1"}
+        with patch.object(spider, "spider_note") as mock_spider_note:
+            mock_spider_note.return_value = (True, "ok", note_info)
+
+            saved_count = spider.spider_some_note(
+                ["https://www.xiaohongshu.com/explore/note_1"],
+                "cookie",
+                {"db": {"database": "d"}, "media": "/tmp/media"},
+                "media-db",
+                crawl_task_id="task_1",
+            )
+
+        self.assertEqual(saved_count, 1)
+        mock_download_note.assert_called_once_with(note_info, "/tmp/media", "media-db")
+        mock_save_to_db.assert_called_once_with([note_info], {"database": "d"}, "task_1")
+
+    @patch("xhs_utils.data_util.download_media")
+    def test_download_note_media_db_downloads_images_and_videos(self, mock_download_media):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_note = self.build_detail_note(
+                note_id="image_note",
+                note_type="图集",
+                image_list=["https://img/1.jpg", "https://img/2.jpg"],
+            )
+            video_note = self.build_detail_note(
+                note_id="video_note",
+                note_type="视频",
+                video_cover="https://img/cover.jpg",
+                video_addr="https://video/1.mp4",
+            )
+
+            download_note(image_note, tmp_dir, "media-db")
+            download_note(video_note, tmp_dir, "media-db")
+
+        media_calls = mock_download_media.call_args_list
+        self.assertEqual([call.args[1] for call in media_calls], ["image_0", "image_1", "cover", "video"])
+        self.assertEqual([call.args[3] for call in media_calls], ["image", "image", "image", "video"])
 
     def test_parse_cleaning_rule_ids_deduplicates_comma_separated_values(self):
         self.assertEqual(parse_cleaning_rule_ids(" 3,2，3,,1 "), [3, 2, 1])
@@ -241,7 +315,8 @@ class DetailFilterTest(unittest.TestCase):
     @patch("main.save_to_db")
     @patch("main.logger.info")
     @patch("main.filter_titles", create=True)
-    def test_ai_title_and_cleaning_rules_must_match_before_detail_crawl(self, mock_filter_titles, mock_logger_info, mock_save_to_db):
+    @patch("main.is_title_filter_available", return_value=True)
+    def test_ai_title_and_cleaning_rules_must_match_before_detail_crawl(self, mock_is_title_filter_available, mock_filter_titles, mock_logger_info, mock_save_to_db):
         spider = Data_Spider()
         spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note()]))
         mock_filter_titles.return_value = [{"input_key": "note_1", "total_score": 80}]
@@ -276,10 +351,12 @@ class DetailFilterTest(unittest.TestCase):
         self.assertTrue(any("AI_TITLE_FILTER_RESPONSE_DATA" in msg and '"input_key": "note_1"' in msg for msg in log_messages))
         mock_spider_note.assert_called_once()
         mock_save_to_db.assert_called_once()
+        mock_is_title_filter_available.assert_called_once()
 
     @patch("main.save_to_db")
     @patch("main.filter_titles", create=True)
-    def test_ai_filtered_search_note_is_saved_to_db_without_fetching_detail(self, mock_filter_titles, mock_save_to_db):
+    @patch("main.is_title_filter_available", return_value=True)
+    def test_ai_filtered_search_note_is_saved_to_db_without_fetching_detail(self, mock_is_title_filter_available, mock_filter_titles, mock_save_to_db):
         spider = Data_Spider()
         spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note()]))
         mock_filter_titles.return_value = []
@@ -303,10 +380,48 @@ class DetailFilterTest(unittest.TestCase):
         self.assertEqual(len(saved_rows), 1)
         self.assertEqual(saved_rows[0]["note_id"], "note_1")
         self.assertIn('"id": "note_1"', saved_rows[0]["raw_data"])
+        mock_is_title_filter_available.assert_called_once()
+
+    @patch("main.save_to_db")
+    @patch("main.download_note")
+    @patch("main.filter_titles", create=True)
+    @patch("main.is_title_filter_available", return_value=False)
+    def test_ai_unavailable_allows_search_note_detail_and_media_download(self, mock_is_title_filter_available, mock_filter_titles, mock_download_note, mock_save_to_db):
+        spider = Data_Spider()
+        spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note()]))
+        detail_note = {"note_id": "note_1"}
+
+        with patch.object(spider, "spider_note") as mock_spider_note:
+            mock_spider_note.return_value = (True, "ok", detail_note)
+            note_list, success, _ = spider.spider_some_search_note(
+                query="test",
+                require_num=20,
+                cookies_str="cookie",
+                base_path={"db": {"database": "d"}, "media": "/tmp/media"},
+                save_choice="media-db",
+                crawl_task_id="task_1",
+            )
+
+        self.assertTrue(success)
+        self.assertEqual(
+            note_list,
+            ["https://www.xiaohongshu.com/explore/note_1?xsec_token=token_note_1"],
+        )
+        mock_is_title_filter_available.assert_called_once()
+        mock_filter_titles.assert_not_called()
+        mock_spider_note.assert_called_once()
+        mock_download_note.assert_called_once_with(detail_note, "/tmp/media", "media-db")
+        mock_save_to_db.assert_called_once()
+        saved_rows = mock_save_to_db.call_args.args[0]
+        self.assertEqual(saved_rows, [detail_note])
+        self.assertTrue(detail_note["ai_title_filter_passed"])
+        self.assertTrue(detail_note["cleaning_rule_passed"])
+        self.assertTrue(detail_note["detail_crawl_succeeded"])
 
     @patch("main.save_to_db")
     @patch("main.filter_titles", create=True)
-    def test_detail_failure_falls_back_to_search_record_with_snapshot_flags(self, mock_filter_titles, mock_save_to_db):
+    @patch("main.is_title_filter_available", return_value=True)
+    def test_detail_failure_falls_back_to_search_record_with_snapshot_flags(self, mock_is_title_filter_available, mock_filter_titles, mock_save_to_db):
         spider = Data_Spider()
         spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note()]))
         mock_filter_titles.return_value = [{"input_key": "note_1", "total_score": 80}]
@@ -344,10 +459,12 @@ class DetailFilterTest(unittest.TestCase):
         self.assertTrue(saved_rows[0]["ai_title_filter_passed"])
         self.assertTrue(saved_rows[0]["cleaning_rule_passed"])
         self.assertFalse(saved_rows[0]["detail_crawl_succeeded"])
+        mock_is_title_filter_available.assert_called_once()
 
     @patch("main.save_to_db")
     @patch("main.filter_titles", create=True)
-    def test_cleaning_rule_filtered_search_note_is_saved_to_db_without_fetching_detail(self, mock_filter_titles, mock_save_to_db):
+    @patch("main.is_title_filter_available", return_value=True)
+    def test_cleaning_rule_filtered_search_note_is_saved_to_db_without_fetching_detail(self, mock_is_title_filter_available, mock_filter_titles, mock_save_to_db):
         spider = Data_Spider()
         spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note(liked_count="50")]))
         mock_filter_titles.return_value = [{"input_key": "note_1", "total_score": 80}]
@@ -380,10 +497,12 @@ class DetailFilterTest(unittest.TestCase):
         self.assertEqual(len(saved_rows), 1)
         self.assertEqual(saved_rows[0]["note_id"], "note_1")
         self.assertIn('"id": "note_1"', saved_rows[0]["raw_data"])
+        mock_is_title_filter_available.assert_called_once()
 
     @patch("main.save_to_db")
     @patch("main.filter_titles", create=True)
-    def test_ai_filter_exception_skips_detail_without_failing_batch(self, mock_filter_titles, mock_save_to_db):
+    @patch("main.is_title_filter_available", return_value=True)
+    def test_ai_filter_exception_skips_detail_without_failing_batch(self, mock_is_title_filter_available, mock_filter_titles, mock_save_to_db):
         spider = Data_Spider()
         spider.xhs_apis.search_some_note = Mock(return_value=(True, "ok", [self.build_search_note()]))
         mock_filter_titles.side_effect = RuntimeError("model unavailable")
@@ -403,10 +522,12 @@ class DetailFilterTest(unittest.TestCase):
         mock_filter_titles.assert_called_once_with({"note_1": "title"})
         mock_spider_note.assert_not_called()
         mock_save_to_db.assert_called_once()
+        mock_is_title_filter_available.assert_called_once()
 
     @patch("main.save_to_db")
     @patch("main.filter_titles", create=True)
-    def test_missing_title_is_sent_to_ai_filter_as_empty_string(self, mock_filter_titles, mock_save_to_db):
+    @patch("main.is_title_filter_available", return_value=True)
+    def test_missing_title_is_sent_to_ai_filter_as_empty_string(self, mock_is_title_filter_available, mock_filter_titles, mock_save_to_db):
         spider = Data_Spider()
         note = self.build_search_note()
         note["note_card"].pop("title")
@@ -428,10 +549,12 @@ class DetailFilterTest(unittest.TestCase):
         mock_filter_titles.assert_called_once_with({"note_1": ""})
         mock_spider_note.assert_not_called()
         mock_save_to_db.assert_called_once()
+        mock_is_title_filter_available.assert_called_once()
 
     @patch("main.save_to_db")
     @patch("main.filter_titles", create=True)
-    def test_search_display_title_is_sent_to_ai_filter_when_title_missing(self, mock_filter_titles, mock_save_to_db):
+    @patch("main.is_title_filter_available", return_value=True)
+    def test_search_display_title_is_sent_to_ai_filter_when_title_missing(self, mock_is_title_filter_available, mock_filter_titles, mock_save_to_db):
         spider = Data_Spider()
         note = self.build_search_note()
         note["note_card"].pop("title")
@@ -454,6 +577,7 @@ class DetailFilterTest(unittest.TestCase):
         mock_filter_titles.assert_called_once_with({"note_1": "搜索列表标题"})
         mock_spider_note.assert_not_called()
         mock_save_to_db.assert_called_once()
+        mock_is_title_filter_available.assert_called_once()
 
     @patch("xhs_utils.data_util.pymysql.connect")
     def test_save_to_db_writes_snapshot_filter_and_detail_flags(self, mock_connect):
