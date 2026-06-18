@@ -128,6 +128,38 @@ class DetailFilterTest(unittest.TestCase):
 
         self.assertLess(note_url_branch.lineno, parse_call.lineno)
 
+    def test_spider_note_reports_missing_items_as_detail_response_error(self):
+        spider = Data_Spider()
+        spider.xhs_apis.get_note_info = Mock(
+            return_value=(True, "ok", {"success": True, "msg": "ok", "data": {"current_time": 1}})
+        )
+
+        success, msg, note_info = spider.spider_note(
+            "https://www.xiaohongshu.com/explore/note_1",
+            "cookie",
+        )
+
+        self.assertFalse(success)
+        self.assertIn("data.items", str(msg))
+        self.assertIsNone(note_info)
+
+    @patch("main.save_to_db")
+    def test_spider_some_note_returns_zero_saved_count_when_detail_fails(self, mock_save_to_db):
+        spider = Data_Spider()
+        with patch.object(spider, "spider_note") as mock_spider_note:
+            mock_spider_note.return_value = (False, "data.items missing", None)
+
+            saved_count = spider.spider_some_note(
+                ["https://www.xiaohongshu.com/explore/note_1"],
+                "cookie",
+                {"db": {}},
+                "db",
+                crawl_task_id="task_1",
+            )
+
+        self.assertEqual(saved_count, 0)
+        mock_save_to_db.assert_called_once_with([], {}, "task_1")
+
     def test_parse_cleaning_rule_ids_deduplicates_comma_separated_values(self):
         self.assertEqual(parse_cleaning_rule_ids(" 3,2，3,,1 "), [3, 2, 1])
 

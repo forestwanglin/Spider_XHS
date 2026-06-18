@@ -94,13 +94,17 @@ class Data_Spider():
         try:
             success, msg, note_info = self.xhs_apis.get_note_info(note_url, cookies_str, proxies)
             if success:
-                raw_note_info = note_info['data']['items'][0]
+                items = (note_info or {}).get('data', {}).get('items')
+                if not items:
+                    raise ValueError(f"详情响应缺少 data.items，可能缺少 xsec_token 或触发风控，msg: {msg}")
+                raw_note_info = items[0]
                 raw_note_info['url'] = note_url
                 note_info = handle_note_info(raw_note_info)
                 note_info['raw_data'] = json.dumps(raw_note_info, ensure_ascii=False)
         except Exception as e:
             success = False
             msg = e
+            note_info = None
         logger.info(f'爬取笔记信息 {note_url}: {success}, msg: {msg}')
         return success, msg, note_info
 
@@ -150,6 +154,8 @@ class Data_Spider():
             if fallback_rows:
                 db_rows.extend(fallback_rows)
             save_to_db(db_rows, base_path['db'], crawl_task_id)
+            return len(db_rows)
+        return len(note_list)
 
 
     def spider_user_all_note(self, user_url: str, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None):
@@ -322,8 +328,8 @@ if __name__ == '__main__':
 
     note_url = args.noteUrl.strip() if args.noteUrl and args.noteUrl.strip() else ''
     if note_url:
-        data_spider.spider_some_note([note_url], cookies_str, base_path, 'db', crawl_task_id=crawl_task_id)
-        raise SystemExit(0)
+        saved_count = data_spider.spider_some_note([note_url], cookies_str, base_path, 'db', crawl_task_id=crawl_task_id)
+        raise SystemExit(0 if saved_count > 0 else 1)
 
     if not args.query or not args.query.strip():
         raise ValueError('Query 未提供：普通抓取请传 --query')
