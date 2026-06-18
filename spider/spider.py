@@ -267,11 +267,13 @@ if __name__ == '__main__':
         epilog='示例:\n'
                '  python -m spider.spider --query "榴莲"\n'
                '  python -m spider.spider --query "榴莲" --cleaningRuleIds 1,2,3\n'
+               '  python -m spider.spider --noteUrl "https://www.xiaohongshu.com/explore/xxx"\n'
                '  python -m spider.spider --validate-cookies --cookies "a1=...; web_session=..."\n'
                '说明:\n'
                '  使用 -h 或 --help 打印所有可用参数和描述。'
     )
     parser.add_argument('--query', required=False, default='', help='搜索关键词；普通抓取时必填')
+    parser.add_argument('--noteUrl', required=False, default='', help='单条笔记 URL；传入后直接抓取该笔记并保存到数据库')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
     parser.add_argument('--cookies', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES。校验模式下必须显式传入')
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
@@ -284,7 +286,6 @@ if __name__ == '__main__':
         help='清洗/过滤规则 ID 列表，可选；多个 ID 用英文或中文逗号分隔，例如: 1,2,3'
     )
     args = parser.parse_args()
-    cleaning_rule_ids = parse_cleaning_rule_ids(args.cleaningRuleIds)
 
     env_cookies_str, _, db_config = load_env()
     explicit_cookie = args.cookies.strip() if args.cookies and args.cookies.strip() else ''
@@ -302,8 +303,6 @@ if __name__ == '__main__':
     cookies_str = explicit_cookie or env_cookies_str
     if not cookies_str:
         raise ValueError('Cookie 未提供：请传 --cookies 或在 .env 中配置 COOKIES')
-    if not args.query or not args.query.strip():
-        raise ValueError('Query 未提供：普通抓取请传 --query')
     data_spider = Data_Spider()
     crawl_task_id = args.taskId.strip() if args.taskId and args.taskId.strip() else datetime.now().strftime('%Y%m%d_%H%M%S')
     """
@@ -321,8 +320,17 @@ if __name__ == '__main__':
     # user_url = 'https://www.xiaohongshu.com/user/profile/64c3f392000000002b009e45?xsec_token=AB-GhAToFu07JwNk_AMICHnp7bSTjVz2beVIDBwSyPwvM=&xsec_source=pc_feed'
     # data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all', crawl_task_id=crawl_task_id)
 
+    note_url = args.noteUrl.strip() if args.noteUrl and args.noteUrl.strip() else ''
+    if note_url:
+        data_spider.spider_some_note([note_url], cookies_str, base_path, 'db', crawl_task_id=crawl_task_id)
+        raise SystemExit(0)
+
+    if not args.query or not args.query.strip():
+        raise ValueError('Query 未提供：普通抓取请传 --query')
+
     # 3 搜索指定关键词的笔记
     query = args.query.strip()
+    cleaning_rule_ids = parse_cleaning_rule_ids(args.cleaningRuleIds)
     cleaning_rules = load_cleaning_rules_from_db(cleaning_rule_ids, db_config)
     query_num = args.num
     sort_type_choice = 0  # 0 综合排序, 1 最新, 2 最多点赞, 3 最多评论, 4 最多收藏

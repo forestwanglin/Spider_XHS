@@ -77,6 +77,57 @@ class DetailFilterTest(unittest.TestCase):
         self.assertGreaterEqual(len(calls[0].args), 5)
         self.assertEqual(calls[0].args[4].value, "db")
 
+    def test_cli_note_url_entrypoint_uses_spider_some_note_db_save_choice(self):
+        source = Path("spider/spider.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "spider_some_note"
+        ]
+
+        db_calls = [
+            call
+            for call in calls
+            if len(call.args) >= 4
+            and isinstance(call.args[3], ast.Constant)
+            and call.args[3].value == "db"
+        ]
+
+        self.assertEqual(len(db_calls), 1)
+
+    def test_cli_help_exposes_note_url_argument(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "spider.spider", "--help"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertIn("noteUrl", result.stdout)
+
+    def test_cli_note_url_branch_runs_before_cleaning_rule_parse(self):
+        source = Path("spider/spider.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        note_url_branch = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "note_url"
+        )
+        parse_call = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "parse_cleaning_rule_ids"
+        )
+
+        self.assertLess(note_url_branch.lineno, parse_call.lineno)
+
     def test_parse_cleaning_rule_ids_deduplicates_comma_separated_values(self):
         self.assertEqual(parse_cleaning_rule_ids(" 3,2，3,,1 "), [3, 2, 1])
 
