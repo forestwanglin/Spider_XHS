@@ -130,6 +130,52 @@ class DetailFilterTest(unittest.TestCase):
 
         self.assertEqual(len(db_calls), 1)
 
+    def test_cli_note_url_argument_is_repeatable(self):
+        source = Path("spider/spider.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        note_url_arg = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "add_argument"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "--noteUrl"
+        )
+        action_keyword = next(
+            keyword
+            for keyword in note_url_arg.keywords
+            if keyword.arg == "action"
+        )
+
+        self.assertIsInstance(action_keyword.value, ast.Constant)
+        self.assertEqual(action_keyword.value.value, "append")
+
+    def test_cli_note_url_entrypoint_passes_note_url_list(self):
+        source = Path("spider/spider.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "spider_some_note"
+        ]
+
+        db_calls = [
+            call
+            for call in calls
+            if call.args
+            and isinstance(call.args[0], ast.Name)
+            and call.args[0].id == "note_urls"
+            and len(call.args) >= 4
+            and isinstance(call.args[3], ast.Name)
+            and call.args[3].id == "SAVE_CHOICE_MEDIA_DB"
+        ]
+
+        self.assertEqual(len(db_calls), 1)
+
     def test_cli_help_exposes_note_url_argument(self):
         result = subprocess.run(
             [sys.executable, "-m", "spider.spider", "--help"],
@@ -148,7 +194,7 @@ class DetailFilterTest(unittest.TestCase):
             for node in ast.walk(tree)
             if isinstance(node, ast.If)
             and isinstance(node.test, ast.Name)
-            and node.test.id == "note_url"
+            and node.test.id == "note_urls"
         )
         parse_call = next(
             node

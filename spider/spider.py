@@ -309,7 +309,7 @@ if __name__ == '__main__':
                '  使用 -h 或 --help 打印所有可用参数和描述。'
     )
     parser.add_argument('--query', required=False, default='', help='搜索关键词；普通抓取时必填')
-    parser.add_argument('--noteUrl', required=False, default='', help='单条笔记 URL；传入后直接抓取该笔记并保存到数据库')
+    parser.add_argument('--noteUrl', required=False, action='append', default=[], help='笔记 URL；可重复传入，直接抓取笔记并保存到数据库')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
     parser.add_argument('--cookies', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES。校验模式下必须显式传入')
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
@@ -356,9 +356,9 @@ if __name__ == '__main__':
     # user_url = 'https://www.xiaohongshu.com/user/profile/64c3f392000000002b009e45?xsec_token=AB-GhAToFu07JwNk_AMICHnp7bSTjVz2beVIDBwSyPwvM=&xsec_source=pc_feed'
     # data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all', crawl_task_id=crawl_task_id)
 
-    note_url = args.noteUrl.strip() if args.noteUrl and args.noteUrl.strip() else ''
-    if note_url:
-        saved_count = data_spider.spider_some_note([note_url], cookies_str, base_path, SAVE_CHOICE_MEDIA_DB, crawl_task_id=crawl_task_id)
+    note_urls = [item.strip() for item in args.noteUrl if item and item.strip()]
+    if note_urls:
+        saved_count = data_spider.spider_some_note(note_urls, cookies_str, base_path, SAVE_CHOICE_MEDIA_DB, crawl_task_id=crawl_task_id)
         raise SystemExit(0 if saved_count > 0 else 1)
 
     if not args.query or not args.query.strip():
