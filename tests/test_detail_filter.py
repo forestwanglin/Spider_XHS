@@ -206,6 +206,12 @@ class DetailFilterTest(unittest.TestCase):
 
         self.assertLess(note_url_branch.lineno, parse_call.lineno)
 
+    def test_cli_note_url_entrypoint_logs_batch_count(self):
+        source = Path("spider/spider.py").read_text(encoding="utf-8")
+
+        self.assertIn("直接爬取入口接收到 noteUrl 数量", source)
+        self.assertIn("直接爬取入口 noteUrl[", source)
+
     def test_spider_note_reports_missing_items_as_detail_response_error(self):
         spider = Data_Spider()
         spider.xhs_apis.get_note_info = Mock(
