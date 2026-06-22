@@ -361,7 +361,18 @@ if __name__ == '__main__':
         logger.info(f"直接爬取入口接收到 noteUrl 数量: {len(note_urls)}")
         for index, note_url in enumerate(note_urls, start=1):
             logger.info(f"直接爬取入口 noteUrl[{index}/{len(note_urls)}]: {note_url}")
-        saved_count = data_spider.spider_some_note(note_urls, cookies_str, base_path, SAVE_CHOICE_MEDIA_DB, crawl_task_id=crawl_task_id)
+        saved_count = data_spider.spider_some_note(
+            note_urls,
+            cookies_str,
+            base_path,
+            SAVE_CHOICE_MEDIA_DB,
+            crawl_task_id=crawl_task_id,
+            detail_success_flags={
+                'ai_title_filter_passed': True,
+                'cleaning_rule_passed': True,
+                'detail_crawl_succeeded': True,
+            },
+        )
         logger.info(f"直接爬取入口保存数量: {saved_count}/{len(note_urls)}")
         raise SystemExit(0 if saved_count > 0 else 1)
 

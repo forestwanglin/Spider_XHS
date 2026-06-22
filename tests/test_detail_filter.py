@@ -212,6 +212,42 @@ class DetailFilterTest(unittest.TestCase):
         self.assertIn("直接爬取入口接收到 noteUrl 数量", source)
         self.assertIn("直接爬取入口 noteUrl[", source)
 
+    def test_cli_note_url_entrypoint_marks_saved_rows_as_passed(self):
+        source = Path("spider/spider.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        note_url_branch = next(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "note_urls"
+        )
+        spider_some_note_call = next(
+            node
+            for node in ast.walk(note_url_branch)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "spider_some_note"
+        )
+        detail_success_flags = next(
+            keyword.value
+            for keyword in spider_some_note_call.keywords
+            if keyword.arg == "detail_success_flags"
+        )
+        flag_values = {
+            key.value: value.value
+            for key, value in zip(detail_success_flags.keys, detail_success_flags.values)
+        }
+
+        self.assertEqual(
+            flag_values,
+            {
+                "ai_title_filter_passed": True,
+                "cleaning_rule_passed": True,
+                "detail_crawl_succeeded": True,
+            },
+        )
+
     def test_spider_note_reports_missing_items_as_detail_response_error(self):
         spider = Data_Spider()
         spider.xhs_apis.get_note_info = Mock(
