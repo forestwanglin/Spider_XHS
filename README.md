@@ -1,3 +1,5 @@
+<div align="center">
+
 <p align="center">
   <a href="https://github.com/cv-cat/Spider_XHS" target="_blank">
     <picture>
@@ -6,27 +8,57 @@
   </a>
 </p>
 
-<div align="center">
-
 # Spider_XHS
 
-**专业的小红书数据采集 & 全域运营解决方案 & Agent Skills**
+### The All-in-One Manager for XHS
 
 [![Skills](https://img.shields.io/badge/skills-supported-success)](https://github.com/cv-cat/XhsSkills)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![Node.js](https://img.shields.io/badge/nodejs-20%2B-green)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/license-MIT-orange)](LICENSE)
 
+<a href="https://trendshift.io/repositories/13631" target="_blank"><img src="https://trendshift.io/api/badge/repositories/13631" alt="cv-cat%2FSpider_XHS | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+
 </div>
+
+## ❤️Sponsor
+
+> [想出现在这里？](mailto:992822653@qq.com)
+
+<details open>
+<summary>点击折叠</summary>
+
+<div align="center">
+
+[![FastAIToken](https://github.com/TheSmallHanCat/flow2api/blob/main/static/sponsors/fastaitoken-banner.png)](https://www.fastaitoken.com/register?aff=48J4VXUABAAV)
+
+</div>
+
+**FastAIToken** 是面向开发者的 AI API 聚合平台，支持 OpenAI、Claude、Gemini 等主流大模型，兼容 OpenAI API 协议，可无缝接入 **Claude Code、Codex、Gemini CLI、Cherry Studio、Cline、Continue** 等各类 AI 开发工具。平台采用 **充值 1:1（1 元 = 1 美元 API 额度）**，帮助开发者以更低成本、更高效率地使用全球领先的大模型服务。
+
+平台提供多个可选分组与公开状态页，开发者可根据成本、响应速度和稳定性自由选择不同渠道，并享受 **7×24 小时真人技术支持**（非机器人）。
+
+**主要做 AI 开发接入？可以试试 [FastAIToken](https://www.fastaitoken.com/register?aff=48J4VXUABAAV)，兼容 Codex / Claude Code / Gemini CLI 等主流工具。**
+
+
+---
+
+<table>
+<tr>
+<td width="180"><a href="https://www.ipwo.net/?ref=githubcvcat"><img src="https://github.com/user-attachments/assets/174f644d-779e-42b9-82ba-37973201fb20" alt="ipwo" width="150"></a></td>
+<td><a href="https://www.ipwo.net/?ref=githubcvcat">IPWO</a> 全球住宅代理，为开发者提供灵活的网络访问资源，适用于数据采集、市场研究、AI 应用开发等场景。开发者在不同应用场景下优化访问体验，为小红书数据研究、内容分析以及自动化开发提供更多支持。HTTP/HTTPS/socks5多种协议，免费试用，优惠折扣码“0109”</td>
+</tr>
+
+</table>
+
+</details>
+
+## 为什么需要这个项目？
 
 > **在 AI 大模型爆发的时代，内容运营的竞争本质是效率竞争。**
 > 本项目封装了小红书平台完整的数据采集与内容发布能力，为开发者构建 AI 运营智能体提供可靠、稳定的底层 API 支撑。
 
 **⚠️ 本项目仅供学习交流使用，禁止任何商业化行为，如有违反，后果自负**
-
----
-
-## 为什么需要这个项目？
 
 ```
 采集竞品笔记 ──► [Spider_XHS] ──► 你的 AI Agent（改写 / 生成 / 分析）──► 自动上传发布
@@ -36,7 +68,7 @@
 
 小红书没有开放完整的内容运营接口。想要接入 AI 大模型实现内容批量采集、智能改写、一键发布，首先需要能**稳定读写平台数据**。Spider_XHS 解决的正是这个前置问题：
 
-- 逆向还原了小红书 PC 端与创作者平台的签名算法（a1 / web_id / websectiga / sec_poison_id / gid / x-s / x-t / x-s-common / x-b3-traceid / x-xray-traceid / x-rap-param / search_id / request_id / sign / q-signature 等参数）
+- 逆向还原了小红书 PC 端与创作者平台的签名算法（a1 / web_id / b1 / websectiga / sec_poison_id / gid / x-s / x-t / x-s-common / x-b3-traceid / x-xray-traceid / x-rap-param / search_id / request_id / sign / q-signature 等参数）
 - 封装全部核心 HTTP 接口，签名参数已透明处理
 - 同时覆盖 **数据采集**（PC端）、**内容发布**（创作者平台）、**KOL数据**（蒲公英）三大场景
 
@@ -89,9 +121,11 @@
 | | 获取笔记评论 | ✅ |
 | | 获取未读消息 / 评论@提醒 / 点赞收藏 / 新增关注 | ✅ |
 | **创作者平台** | 二维码登录 / 手机验证码登录 | ✅ |
+| | 登录会话级自动重试（406 概率闸门） | ✅ |
 | | 上传图集作品 | ✅ |
-| | 上传视频作品 | ✅ |
+| | 上传视频作品（含转码轮询） | ✅ |
 | | 查看已发布作品列表 | ✅ |
+| | 发布接口 Creator RAP 本地纯算 | ✅ |
 | **蒲公英平台** | 获取 KOL 博主列表 & 详细数据 | ✅ |
 | | 获取博主粉丝画像 & 历史趋势 | ✅ |
 | | 发起合作邀请 | ✅ |
@@ -109,12 +143,16 @@ Spider_XHS 天然适合作为 AI 运营 Agent 的数据底座，以下是几种�
 ```python
 from apis.xhs_pc_apis import XHS_Apis
 from apis.xhs_creator_apis import XHS_Creator_Apis
+from xhs_utils.xhs_pc import XHSPcAuth
+from xhs_utils.xhs_creator import XHSCreatorAuth
 
-pc_api = XHS_Apis()
-creator_api = XHS_Creator_Apis()
+pc_auth = XHSPcAuth.from_cookie(pc_cookie)
+pc_api = XHS_Apis(pc_auth).bootstrap()
+creator_auth = XHSCreatorAuth.from_cookie(creator_cookie)
+creator_api = XHS_Creator_Apis(creator_auth).bootstrap()
 
 # 1. 采集竞品笔记
-success, msg, note = pc_api.get_note_info(note_url, cookies_str)
+success, msg, note = pc_api.get_note_info(note_url)
 
 # 2. 交给 AI 改写（接入任意大模型）
 rewritten = your_ai_agent(note['content'])   # GPT / Claude / Qwen / 本地模型
@@ -126,14 +164,14 @@ creator_api.post_note({
     "media_type": "image",
     "images": [...],
     ...
-}, creator_cookies_str)
+})
 ```
 
 ### 场景二：关键词监控 + AI 情报分析
 
 ```python
 # 搜索指定关键词的最新笔记，交给 AI 分析趋势
-success, msg, notes = pc_api.search_some_note(query, require_num, cookies_str, ...)
+success, msg, notes = pc_api.search_some_note(query, require_num, ...)
 analysis = your_ai_agent(notes)
 ```
 
@@ -180,23 +218,86 @@ pip install -r requirements.txt
 npm install
 ```
 
-### 🎨 配置 Cookie
+### 🎨 配置登录方式
 
-在项目根目录的 `.env` 文件中填入你的登录 Cookie：
+项目运行不依赖浏览器。直接在 `spider/spider.py` 中设置：
+
+```python
+login_type = 'cookie'  # cookie / qrcode / phone
+```
+
+- `qrcode`：项目本地请求二维码，用小红书 App 扫码。
+- `phone`：项目直接调用手机号验证码登录接口。
+- `cookie`：用户登录后直接复制完整 Cookie，或复用本项目登录流程之前保存的完整 Cookie。
+
+只有 `cookie` 模式需要复制 `.env.example` 为 `.env`：
 
 ```
 COOKIES='your_cookie_here'
 ```
 
-Cookie 获取方式：浏览器登录小红书后，按 `F12` 打开开发者工具 → 网络 → Fetch/XHR → 找任意一个请求 → 复制请求头中的 `cookie` 字段。
+PC 端统一通过 `XHSPcAuth` 管理登录状态、b1、DS、MNS 环境材料和会话计数：
 
-![image](https://github.com/user-attachments/assets/6a7e4ecb-0432-4581-890a-577e0eae463d)
+```python
+from apis.xhs_pc_apis import XHS_Apis
+from xhs_utils.xhs_pc import XHSPcAuth
 
-![image](https://github.com/user-attachments/assets/5e62bc35-d758-463e-817c-7dcaacbee13c)
+# 无浏览器二维码登录
+auth = XHSPcAuth.from_qrcode_login()
 
-> **注意：必须是登录后的 Cookie，未登录状态无效。**
+# 或复用已保存的登录 Cookie
+# auth = XHSPcAuth.from_cookie(cookies_str)
+
+api = XHS_Apis(auth).bootstrap()
+success, message, data = api.get_unread_message()
+```
+
+`XHSPcAuth` 的登录 Cookie 有三个来源：二维码登录、手机号登录、用户直接提供完整 Cookie。前两种会按 PC 页面顺序完成 `DS → 两段 scripting → login/activate → webprofile`：项目本地生成 `a1/webId/loadts/ets`、请求签名、`websectiga` 和约 11KB 的 `profileData`，匿名 `webprofile` 验收取得 `gid` 后才允许用户扫码或发送验证码，登录成功后用服务端正式 `web_session` 覆盖访客会话。整个过程不启动、不连接浏览器。第三种原样接收用户复制过来的完整 Cookie，不重造其登录态。
+
+Creator 端同样只允许通过三个工厂创建，业务 API 不再散传 Cookie、a1、b1 或 dsl：
+
+```python
+from apis.xhs_creator_apis import XHS_Creator_Apis
+from xhs_utils.xhs_creator import XHSCreatorAuth
+
+# 三选一：
+creator_auth = XHSCreatorAuth.from_qrcode_login()
+# creator_auth = XHSCreatorAuth.from_phone_login()
+# creator_auth = XHSCreatorAuth.from_cookie(完整_creator_cookie)
+
+creator_api = XHS_Creator_Apis(creator_auth).bootstrap()
+success, message, notes = creator_api.get_all_posted_notes()
+```
+
+Creator 当前按浏览器 4.3.6 链路实现：`appId=ugc`、`webBuild=1.18.0`，启动阶段使用 `mns0201/nop`，安全状态就绪后切到 `mns0101/a1`。b1、MNS 装配、X-s、X-t、X-S-Common 和 profileData 均在本地计算；`mns0101` 尾部使用服务端 DS 程序导出的 `_dsf`，该程序在隔离的本地 Node VM 中执行。`_dsl`、DS/scripting code、登录 Cookie、gid 等仍按浏览器行为从服务端取得，用户无需填写。二维码和手机号登录都不启动或连接浏览器。
+
+关于登录与发布的可靠性（26/07/25 补充）：Creator customer 域登录动作存在按设备会话标记的概率性 HTTP 406（与字段和签名无关），登录流程已内置会话级自动重试（整包重建匿名设备，上限 16 次）。b1 增加每会话抖动（x36/x37/x39/x84），避免静态指纹跨设备聚类。发布链路已按浏览器实抓对齐：permit 与 query_transcode 使用 `mns0101/nop` 冷档签名（视频转码轮询依赖 PC 侧 `web_session`，可通过 PC 扫码登录取得）、未选地点时省略 `post_loc` 键、发布请求携带 Creator 436B 指纹模板的 `x-rap-param`（浏览器信封 AES 解密还原，Uuid 每次随机）、code=-1 概率拒绝自动重发。全部 XHR 请求不再携带 `sec-ch-ua*` 客户端提示头（与浏览器行为一致，仅导航请求保留）。
+
+`profileData` 已提纯为显式字段纯算：按固定顺序序列化 `x1..x84`，再执行 UTF-8/Base64、DES-ECB 零填充和 hex 编码。项目不会构造浏览器对象，也不会加载或执行原始指纹 SDK。正常用户无需填写这些字段；需要复现特定设备时，可通过三个工厂方法的 `web_profile_fields={...}` 参数覆盖字段，或用 `web_profile_i12_seed`、`web_profile_fi` 对齐两个小型动态段。
+
+正常运行不需要传 b1、DSL 或浏览器 Storage。只有逆向调试、版本升级对齐时，才使用 `b1_state`、Storage 快照、`web_build` 或 `mns_env` 覆盖。
+
+b1 默认不是从浏览器读取，而是“仓库内置的本地设备/页面指纹模板 + 当前时间与会话动态计数”，交给本地 JS 算法纯算生成。这里的“内置”指项目固化的逆向模板，不是内置或托管了一个浏览器。
+
+PC 参数来源是明确分层的：
+
+| 来源 | 参数 |
+|------|------|
+| 用户选择 | `cookie`、`qrcode` 或 `phone` 登录模式 |
+| 仅逆向对齐可选 | 预计算 `b1`、`dsl`、`user_id`、保存的运行时状态、`b1_state`、`web_build`、`mns_env`、RAP 指纹、webprofile 字段/动态段覆盖 |
+| JS 算法生成 | b1、MNS0101/0201/0301、X-s、X-t、X-S-Common、x-rap-param、websectiga、profileData |
+| Python 状态与请求组装 | loadts、ets、seq、traceid、xy-direction、search_id、request_id |
+| 自动维护的生命周期 | dsllt、last_tiga_update_time、p1、sc、tab device ID、RWP fingerprint、unread |
+| 远程程序或锚点 | `_dsl`、websectiga scripting code |
+| 服务端签发 | `web_session`、`id_token`、`gid`、`sec_poison_id`、验证码挑战、登录 token、RWP login token |
+
+签名加密没有 JS/Python 两套实现：PC 与 Creator 共用算法唯一来源 `xhs_utils/xhs_core/js/`，平台目录只保留各自状态、参数装配和兼容入口；Python 的 `runtime.py` 只负责调用 Node 和校验结果。
+
+> `web_session` 是服务端登录凭证，不能通过算法伪造；二维码和手机号模式会通过服务端登录流程取得，但全程不需要浏览器。
 
 ### 🚀 运行项目
+
+笔记链接、用户链接、搜索关键词、保存方式和搜索筛选参数直接在 `spider/spider.py` 的入口示例中修改。
 
 ```bash
 python -m spider.spider
@@ -229,16 +330,27 @@ Spider_XHS/
 │   ├── common_util.py               # 初始化工具（读取.env配置）
 │   ├── cookie_util.py               # Cookie解析
 │   ├── data_util.py                 # 数据处理（Excel保存、媒体下载）
-│   ├── xhs_util.py                  # PC端签名算法封装
-│   ├── xhs_creator_util.py          # 创作者平台签名算法封装
+│   ├── xhs_pc/                      # PC鉴权与签名完整模块
+│   │   ├── auth.py                  # 用户输入与参数归属
+│   │   ├── state.py                 # 设备、页面与会话状态
+│   │   ├── params.py                # 请求参数和请求头组装
+│   │   ├── runtime.py               # Node调用与输出校验，不重复算法
+│   │   ├── dsl.py                   # DS远程锚点获取
+│   │   └── js/                      # 仅 PC 特有模板（profile/rap/deflate/aes）
+│   ├── xhs_creator/                 # Creator鉴权、4.3.6状态与请求装配
+│   │   ├── auth.py                  # 三种登录来源和参数归属
+│   │   ├── state.py                 # b1/MNS/profileData生命周期
+│   │   ├── params.py                # X-s/X-S-Common与浏览器请求头
+│   │   ├── runtime.py               # 共用算法的Node调用与门禁
+│   │   └── js/                      # Creator 特有模板与上传签名（profile/reference/rap指纹/sign/signature）
+│   ├── xhs_core/                    # PC/Creator共用纯算和DS/websectiga核心
+│   │   └── js/                      # b1/MNS/X-s/X-S-Common算法唯一实现
+│   ├── xhs_auth.py                  # PC/Creator统一兼容导入层
+│   ├── xhs_util.py                  # 旧导入路径兼容层
+│   ├── xhs_creator_util.py          # Creator上传/发布业务数据辅助
 │   ├── xhs_pugongying_util.py       # 蒲公英平台工具
 │   └── xhs_qianfan_util.py          # 千帆平台工具
-├── static/
-│   ├── xhs_main_260411.js           # PC端签名核心JS（最新版）
-│   ├── xhs_rap.js                   # PC端 x-rap-param JSVMP 补环境生成脚本
-│   ├── xhs_creator_260411.js        # 创作者平台签名核心JS（最新版）
-│   └── ...
-├── .env                             # Cookie配置（不要提交到git）
+├── .env.example                     # 本地配置模板；复制为 .env 使用
 ├── requirements.txt
 ├── Dockerfile
 └── package.json
@@ -251,6 +363,8 @@ Spider_XHS/
 - `spider/spider.py` 是爬虫入口，可根据需求修改调用逻辑
 - `apis/xhs_pc_apis.py` 包含所有 PC 端数据接口
 - `apis/xhs_creator_apis.py` 包含创作者平台发布接口
+- `xhs_utils/xhs_pc/` 是 PC 端鉴权、参数状态和签名算法的统一入口
+- `xhs_utils/xhs_creator/` 是 Creator 端鉴权、参数状态和签名装配的统一入口
 - Cookie 有时效性，失效后需重新获取
 - 建议配合代理（proxies 参数）使用，降低封号风险
 
@@ -275,6 +389,7 @@ Spider_XHS/
 | 25/07/15 | 更新 xs version56 & 小红书创作者接口 |
 | 26/04/11 | 重构创作者平台 API（图集 / 视频上传），新增蒲公英 KOL 数据 API，新增千帆分销商 API，签名算法升级至最新版 |
 | 26/04/28 | 更新 PC 端搜索与笔记详情风控参数，新增 `search_id` 当前算法与 `x-rap-param` 本地 JSVMP 生成，补充 `a1`、`web_id`、`websectiga` 等签名参数说明 |
+| 26/07/25 | 更新全部算法：登录内置按设备会话的 406 概率闸门自动重试；b1 会话级抖动防指纹聚类；发布链路对齐浏览器（permit/query_transcode 冷档签名、省略空 post_loc、上传 header 对齐、发布携带 Creator 436B 指纹 x-rap-param、code=-1 自动重发）；X-S-Common 空 b1 阶段对齐浏览器（x8:null）；全部 XHR 去除 sec-ch-ua* 客户端提示头 |
 
 ---
 
@@ -294,23 +409,25 @@ Spider_XHS/
 
 ## 📈 Star 趋势
 
-<a href="https://www.star-history.com/#cv-cat/Spider_XHS&Date">
+<a href="https://cvcat.site/star-history/svg?repos=cv-cat/Spider_XHS&type=Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=cv-cat/Spider_XHS&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=cv-cat/Spider_XHS&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=cv-cat/Spider_XHS&type=Date" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://cvcat.site/star-history/svg?repos=cv-cat/Spider_XHS&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://cvcat.site/star-history/svg?repos=cv-cat/Spider_XHS&type=Date" />
+    <img alt="Star History Chart" src="https://cvcat.site/star-history/svg?repos=cv-cat/Spider_XHS&type=Date" />
   </picture>
 </a>
 
 ---
 
+
 ## 🍔 交流群
 
-如果你对爬虫和 AI Agent 感兴趣，请加作者主页 wx 通过邀请加入群聊
+如果你对爬虫和 AI Agent 感兴趣，可以加入群聊一起讨论~
 
-ps: 请加群10、11，人满或者过期 issue | wx 提醒
+ps: 请加群，人满或者过期 issue | wx 提醒 | qq提醒
 
-![group7](https://github.com/cv-cat/Spider_XHS/blob/master/author/group10-0506.jpg)
+| group-1 | group-2 | group-3 | group-4 (2000人qq群) |
+|:--:|:--:|:--:|:--:|
+| <img width="280" alt="group1" src="https://cvcat.site/assets/group1.jpg" /> | <img width="280" alt="group2" src="https://cvcat.site/assets/group2.jpg" /> | <img width="280" alt="group3" src="https://cvcat.site/assets/group3.jpg" /> | <img width="280" alt="group3" src="https://cvcat.site/assets/group4.jpg" /> |
 
-![group7](https://github.com/cv-cat/Spider_XHS/blob/master/author/group11-0506.jpg)
 
