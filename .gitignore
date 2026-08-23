@@ -1,5 +1,7 @@
 __pycache__
 node_modules/
+/.env
+/datas/
 *.so
 .Python
 build/
@@ -28,12 +30,27 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.claude
-CLAUDE.md
+# Local docs and agent configuration (never publish)
+/docs/
+/tests/
+.agent/
+.agents/
+.claude/
+.codex/
 AGENTS.md
-.agent
-docs
+CLAUDE.md
+CODEX.md
 docx
+.idea/
+# live login session (never commit)
+_live_session.json
+
+# Local reverse-engineering scratch spaces. Durable conclusions stay in local docs/.
+/reverse_pc_*/
+/source/
+
+creator_cookie.json
+
 .env
 .DS_Store
 

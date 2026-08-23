@@ -1,5 +1,6 @@
 PyExecJS
 requests
+curl_cffi==0.15.0
 loguru
 python-dotenv
 retry
@@ -8,5 +9,6 @@ aiohttp
 opencv-python
 numpy
 qrcode
+curl_cffi==0.15.0
 PyMySQL
 openai

@@ -1,7 +1,6 @@
 import json
 import requests
 from loguru import logger
-from xhs_utils.cookie_util import trans_cookies
 from xhs_utils.http_util import REQUEST_TIMEOUT
 from xhs_utils.xhs_qianfan_util import get_qianfan_headers_template, generate_qianfan_data, get_qianfan_userDetail_headers_template
 
@@ -80,7 +79,7 @@ class QianFanAPI:
         headers = get_qianfan_userDetail_headers_template(user_id)
         url = "https://pgy.xiaohongshu.com/api/draco/distributor-square/distributor/cooperative/shop/v2"
         data = {
-            "buyer_id": "56509e0d9eb5782270a7b5ea",
+            "buyer_id": user_id,
             "first_live_category": "",
             "second_live_category": "",
             "date_type": 2,
@@ -95,7 +94,7 @@ class QianFanAPI:
         headers = get_qianfan_userDetail_headers_template(user_id)
         url = "https://pgy.xiaohongshu.com/api/draco/distributor-square/distributor/cooperative/item/v2"
         data = {
-            "buyer_id": "56509e0d9eb5782270a7b5ea",
+            "buyer_id": user_id,
             "first_live_category": "",
             "second_live_category": "",
             "date_type": 2,
@@ -115,26 +114,3 @@ class QianFanAPI:
         }
         response = requests.get(url, headers=headers, cookies=cookies, params=params, timeout=REQUEST_TIMEOUT)
         return response.json()
-
-if __name__ == '__main__':
-    qianfan_api = QianFanAPI()
-    # https://pgy.xiaohongshu.com 的cookie
-    cookies_str = ''
-    cookies = trans_cookies(cookies_str)
-    choice, distribution_category = qianfan_api.choose_categories(cookies)
-    user_list = qianfan_api.get_some_user(choice, distribution_category, 10, cookies)
-    for user in user_list:
-        user_id = user["distributor_id"]
-        user_detail = qianfan_api.get_user_detail(user_id, cookies)
-        user_cooperation = qianfan_api.get_user_cooperation(user_id, cookies)
-        user_shop = qianfan_api.get_user_shop(user_id, cookies)
-        user_item = qianfan_api.get_user_item(user_id, cookies)
-        user_fans = qianfan_api.get_user_fans(user_id, cookies)
-        logger.debug(user)
-        logger.debug(user_detail)
-        logger.debug(user_cooperation)
-        logger.debug(user_shop)
-        logger.debug(user_item)
-        logger.debug(user_fans)
-        logger.info(f'url: https://www.xiaohongshu.com/user/profile/{user_id}')
-        logger.info(f'qianfan_url: https://pgy.xiaohongshu.com/microapp/distribution/live-blogger-info/{user_id}?source=square')

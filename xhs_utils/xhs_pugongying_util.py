@@ -1,4 +1,8 @@
-from xhs_utils.xhs_util import generate_xs_xs_common, get_request_headers_template, generate_x_b3_traceid
+from xhs_utils.xhs_pc.params import (
+    generate_x_b3_traceid,
+    generate_xs,
+)
+from xhs_utils.xhs_pc.state import PcDeviceProfile, cookie_header
 
 def get_pugongying_headers_template():
     return {
@@ -23,10 +27,20 @@ def get_pugongying_headers_template():
         "x-t": ""
     }
 
-def generate_pugongying_headers(a1, api, data=''):
-    xs, xt, xs_common = generate_xs_xs_common(a1, api, data)
+def generate_pugongying_headers(cookies, api, data='', profile=None):
+    profile = profile or PcDeviceProfile(cookies=cookies)
+    profile.update_cookies(cookies)
+    sign_context = profile.next_sign_context(api)
+    xs, xt = generate_xs(
+        cookies['a1'],
+        api,
+        data,
+        cookie=cookie_header(cookies),
+        tier=sign_context['tier'],
+        sign_context=sign_context,
+    )
     x_b3_traceid = generate_x_b3_traceid()
-    headers = get_request_headers_template()
+    headers = get_pugongying_headers_template()
     headers['x-s'] = xs
     headers['x-t'] = str(xt)
     headers['x-b3-traceid'] = x_b3_traceid

@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
+from xhs_utils.xhs_pc import XHSPcAuth
 from xhs_utils.common_util import init, load_env
 from xhs_utils.cleaning_rule_filter import (
     load_cleaning_rules_from_db,
@@ -109,11 +110,12 @@ def build_skip_detail_reason(ai_matched: bool, rule_matched: bool):
     return ",".join(reasons)
 
 
-class Data_Spider():
-    def __init__(self):
-        self.xhs_apis = XHS_Apis()
+class Data_Spider:
+    def __init__(self, auth: XHSPcAuth):
+        self.auth = auth
+        self.xhs_apis = XHS_Apis(auth)
 
-    def spider_note(self, note_url: str, cookies_str: str, proxies=None):
+    def spider_note(self, note_url: str, proxies=None):
         """
         爬取一个笔记的信息
         :param note_url:
@@ -122,7 +124,7 @@ class Data_Spider():
         """
         note_info = None
         try:
-            success, msg, note_info = self.xhs_apis.get_note_info(note_url, cookies_str, proxies)
+            success, msg, note_info = self.xhs_apis.get_note_info(note_url, proxies)
             if success:
                 items = (note_info or {}).get('data', {}).get('items')
                 if not items:
@@ -141,7 +143,6 @@ class Data_Spider():
     def spider_some_note(
         self,
         notes: list,
-        cookies_str: str,
         base_path: dict,
         save_choice: str,
         excel_name: str = '',
@@ -165,7 +166,7 @@ class Data_Spider():
         detail_success_flags = detail_success_flags or {}
         fallback_db_rows_by_url = fallback_db_rows_by_url or {}
         for note_url in notes:
-            success, msg, note_info = self.spider_note(note_url, cookies_str, proxies)
+            success, msg, note_info = self.spider_note(note_url, proxies)
             if note_info is not None and success:
                 note_info.update(detail_success_flags)
                 note_list.append(note_info)
@@ -188,7 +189,7 @@ class Data_Spider():
         return len(note_list)
 
 
-    def spider_user_all_note(self, user_url: str, cookies_str: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None):
+    def spider_user_all_note(self, user_url: str, base_path: dict, save_choice: str, excel_name: str = '', crawl_task_id: str = '', proxies=None):
         """
         爬取一个用户的所有笔记
         :param user_url:
@@ -198,7 +199,7 @@ class Data_Spider():
         """
         note_list = []
         try:
-            success, msg, all_note_info = self.xhs_apis.get_user_all_notes(user_url, cookies_str, proxies)
+            success, msg, all_note_info = self.xhs_apis.get_user_all_notes(user_url, proxies)
             if success:
                 logger.info(f'用户 {user_url} 作品数量: {len(all_note_info)}')
                 for simple_note_info in all_note_info:
@@ -206,14 +207,14 @@ class Data_Spider():
                     note_list.append(note_url)
             if should_save_excel(save_choice):
                 excel_name = user_url.split('/')[-1].split('?')[0]
-            self.spider_some_note(note_list, cookies_str, base_path, save_choice, excel_name, crawl_task_id, proxies)
+            self.spider_some_note(note_list, base_path, save_choice, excel_name, crawl_task_id, proxies)
         except Exception as e:
             success = False
             msg = e
         logger.info(f'爬取用户所有视频 {user_url}: {success}, msg: {msg}')
         return note_list, success, msg
 
-    def spider_some_search_note(self, query: str, require_num: int, cookies_str: str, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', cleaning_rules: list = None, proxies=None):
+    def spider_some_search_note(self, query: str, require_num: int, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', cleaning_rules: list = None, proxies=None):
         """
             指定数量搜索笔记，设置排序方式和笔记类型和笔记数量
             :param query 搜索的关键词
@@ -231,7 +232,7 @@ class Data_Spider():
         filtered_db_rows = []
         fallback_db_rows_by_url = {}
         try:
-            success, msg, notes = self.xhs_apis.search_some_note(query, require_num, cookies_str, sort_type_choice, note_type, note_time, note_range, pos_distance, geo, proxies)
+            success, msg, notes = self.xhs_apis.search_some_note(query, require_num, sort_type_choice, note_type, note_time, note_range, pos_distance, geo, proxies)
             if success:
                 notes = list(filter(lambda x: x['model_type'] == "note", notes))
                 logger.info(f'搜索关键词 {query} 笔记数量: {len(notes)}')
@@ -264,7 +265,6 @@ class Data_Spider():
                 excel_name = query
             self.spider_some_note(
                 note_list,
-                cookies_str,
                 base_path,
                 save_choice,
                 excel_name,
@@ -286,8 +286,11 @@ class Data_Spider():
 
 
 def validate_cookies(cookies_str: str):
-    xhs_apis = XHS_Apis()
-    return xhs_apis.get_user_self_info2(cookies_str)
+    try:
+        auth = XHSPcAuth.from_cookie(cookies_str)
+        return XHS_Apis(auth).get_user_me()
+    except Exception as exc:
+        return False, str(exc), None
 
 if __name__ == '__main__':
     """
@@ -312,6 +315,7 @@ if __name__ == '__main__':
     parser.add_argument('--noteUrl', required=False, action='append', default=[], help='笔记 URL；可重复传入，直接抓取笔记并保存到数据库')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
     parser.add_argument('--cookies', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES。校验模式下必须显式传入')
+    parser.add_argument('--login-type', choices=('cookie', 'qrcode', 'phone'), default='cookie', help='登录方式；默认 cookie')
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
     parser.add_argument('--validate-cookies', action='store_true', help='只校验当前 cookies 是否有效；开启后必须显式传 --cookies')
     parser.add_argument(
@@ -337,9 +341,16 @@ if __name__ == '__main__':
 
     _, base_path = init()
     cookies_str = explicit_cookie or env_cookies_str
-    if not cookies_str:
-        raise ValueError('Cookie 未提供：请传 --cookies 或在 .env 中配置 COOKIES')
-    data_spider = Data_Spider()
+    if args.login_type == 'qrcode':
+        auth = XHSPcAuth.from_qrcode_login(show_in_terminal=True)
+    elif args.login_type == 'phone':
+        auth = XHSPcAuth.from_phone_login()
+    else:
+        if not cookies_str:
+            raise ValueError('cookie 登录模式需要传 --cookies 或在 .env 中配置 COOKIES')
+        auth = XHSPcAuth.from_cookie(cookies_str)
+    data_spider = Data_Spider(auth)
+    data_spider.xhs_apis.bootstrap()
     crawl_task_id = args.taskId.strip() if args.taskId and args.taskId.strip() else datetime.now().strftime('%Y%m%d_%H%M%S')
     """
         save_choice: all: 保存所有的信息（media + excel + db）, media: 保存视频和图片（media-video只下载视频, media-image只下载图片，media都下载）, excel: 保存到excel, db: 保存到mysql, media-db: 保存媒体和mysql
@@ -350,11 +361,11 @@ if __name__ == '__main__':
     # notes = [
     #     r'https://www.xiaohongshu.com/explore/683fe17f0000000023017c6a?xsec_token=ABBr_cMzallQeLyKSRdPk9fwzA0torkbT_ubuQP1ayvKA=&xsec_source=pc_user',
     # ]
-    # data_spider.spider_some_note(notes, cookies_str, base_path, 'all', 'test', crawl_task_id=crawl_task_id)
+    # data_spider.spider_some_note(notes, base_path, 'all', 'test', crawl_task_id=crawl_task_id)
 
     # # 2 爬取用户的所有笔记信息 用户链接 如下所示 注意此url会过期！
     # user_url = 'https://www.xiaohongshu.com/user/profile/64c3f392000000002b009e45?xsec_token=AB-GhAToFu07JwNk_AMICHnp7bSTjVz2beVIDBwSyPwvM=&xsec_source=pc_feed'
-    # data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all', crawl_task_id=crawl_task_id)
+    # data_spider.spider_user_all_note(user_url, base_path, 'all', crawl_task_id=crawl_task_id)
 
     note_urls = [item.strip() for item in args.noteUrl if item and item.strip()]
     if note_urls:
@@ -363,7 +374,6 @@ if __name__ == '__main__':
             logger.info(f"直接爬取入口 noteUrl[{index}/{len(note_urls)}]: {note_url}")
         saved_count = data_spider.spider_some_note(
             note_urls,
-            cookies_str,
             base_path,
             SAVE_CHOICE_MEDIA_DB,
             crawl_task_id=crawl_task_id,
@@ -394,4 +404,4 @@ if __name__ == '__main__':
     #     "latitude": 39.9725,
     #     "longitude": 116.4207
     # }
-    data_spider.spider_some_search_note(query, query_num, cookies_str, base_path, SAVE_CHOICE_MEDIA_DB, sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, cleaning_rules=cleaning_rules)
+    data_spider.spider_some_search_note(query, query_num, base_path, SAVE_CHOICE_MEDIA_DB, sort_type_choice, note_type, note_time, note_range, pos_distance, geo=None, crawl_task_id=crawl_task_id, cleaning_rules=cleaning_rules)
