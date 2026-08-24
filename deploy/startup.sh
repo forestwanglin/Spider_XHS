@@ -80,7 +80,13 @@ if ! nginx -t; then
     exit 1
 fi
 rm -f "${BACKUP_CONF}"
-systemctl restart nginx
+if pgrep -x nginx >/dev/null; then
+    echo "[Nginx] 检测到现有 Nginx master，重载配置..."
+    nginx -s reload
+else
+    echo "[Nginx] 未检测到运行中的 Nginx，启动服务..."
+    systemctl start nginx
+fi
 
 echo "[完成] Spider_XHS API 已启动：PID=${PID}，监听 ${HOST}:${PORT}"
 echo "[完成] Spider_XHS 公网地址：https://spider-xhs-api.winzyy.com"
