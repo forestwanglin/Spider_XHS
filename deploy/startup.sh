@@ -10,6 +10,7 @@ ENV_FILE="${APP_DIR}/.env"
 RUNTIME_DIR="${APP_DIR}/.runtime"
 LOG_DIR="${APP_DIR}/logs"
 PID_FILE="${RUNTIME_DIR}/internal-api.pid"
+WORKER_PID_FILE="${RUNTIME_DIR}/crawl-worker.pid"
 HOST="127.0.0.1"
 PORT="8088"
 
@@ -115,4 +116,20 @@ fi
 rm -f "${BACKUP_CONF}"
 
 echo "[完成] Spider_XHS API 已启动：PID=${PID}，监听 ${HOST}:${PORT}"
+
+echo "[Worker] 启动爬取任务 worker（每 5 秒扫描一次）..."
+nohup "${VENV_DIR}/bin/python" "${APP_DIR}/crawl_worker.py" \
+    --poll-seconds 5 \
+    >> "${LOG_DIR}/crawl-worker.log" 2>&1 &
+WORKER_PID=$!
+echo "${WORKER_PID}" > "${WORKER_PID_FILE}"
+
+sleep 1
+if ! kill -0 "${WORKER_PID}" 2>/dev/null; then
+    rm -f "${WORKER_PID_FILE}"
+    echo "[错误] Spider_XHS worker 启动失败，请查看 ${LOG_DIR}/crawl-worker.log" >&2
+    exit 1
+fi
+
+echo "[完成] Spider_XHS worker 已启动：PID=${WORKER_PID}"
 echo "[完成] Spider_XHS 公网地址：https://spider-xhs-api.winzyy.com"

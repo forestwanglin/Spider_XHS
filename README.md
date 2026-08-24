@@ -250,8 +250,10 @@ chmod +x startup.sh stop.sh restart.sh
 ./restart.sh
 ```
 
-日志写入 `/opt/Spider_XHS/logs/internal-api.log`，进程 PID 写入
-`/opt/Spider_XHS/.runtime/internal-api.pid`。API 只监听 `127.0.0.1:8088`，
+日志分别写入 `/opt/Spider_XHS/logs/internal-api.log` 与
+`/opt/Spider_XHS/logs/crawl-worker.log`，进程 PID 写入
+`/opt/Spider_XHS/.runtime/internal-api.pid` 和
+`/opt/Spider_XHS/.runtime/crawl-worker.pid`。API 只监听 `127.0.0.1:8088`，
 通过 Nginx 对外提供 `https://spider-xhs-api.winzyy.com`：
 
 ```bash

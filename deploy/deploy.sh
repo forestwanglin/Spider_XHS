@@ -46,5 +46,5 @@ echo
 echo "=== 代码同步完成 ==="
 echo "请到远程服务器执行："
 echo "  cd ${REMOTE_DIR}/deploy"
-echo "  ./startup.sh   # 重启 API、发布 Nginx 配置"
-echo "  ./stop.sh      # 停止 Spider_XHS API"
+echo "  ./startup.sh   # 重启 API 与 crawl worker、发布 Nginx 配置"
+echo "  ./stop.sh      # 停止 Spider_XHS API 与 crawl worker"

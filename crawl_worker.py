@@ -170,7 +170,7 @@ def _mark_delivery_delivered(config: dict[str, object], delivery_id: int) -> Non
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true")
-    parser.add_argument("--poll-seconds", type=float, default=2.0)
+    parser.add_argument("--poll-seconds", type=float, default=5.0)
     args = parser.parse_args()
     config = load_database_config()
     while True:
