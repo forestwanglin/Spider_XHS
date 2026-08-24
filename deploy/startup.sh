@@ -68,25 +68,51 @@ if [[ -f "${NGINX_TARGET}" ]]; then
     install -m 644 "${NGINX_TARGET}" "${BACKUP_CONF}"
     RESTORE_CONF=true
 fi
-install -m 644 "${NGINX_CONF}" "${NGINX_TARGET}"
-if ! nginx -t; then
+
+restore_nginx_candidate() {
     if [[ "${RESTORE_CONF}" == true ]]; then
         install -m 644 "${BACKUP_CONF}" "${NGINX_TARGET}"
     else
         rm -f "${NGINX_TARGET}"
     fi
     rm -f "${BACKUP_CONF}"
+}
+
+install -m 644 "${NGINX_CONF}" "${NGINX_TARGET}"
+if ! nginx -t; then
+    restore_nginx_candidate
     echo "[错误] Nginx 配置校验失败，已恢复原配置。" >&2
     exit 1
 fi
-rm -f "${BACKUP_CONF}"
-if pgrep -x nginx >/dev/null; then
-    echo "[Nginx] 检测到现有 Nginx master，重载配置..."
-    nginx -s reload
+
+NGINX_MASTER_PID="$(
+    # `nginx-debug` keeps the same process title but can be managed outside
+    # systemd and does not create /run/nginx.pid.  Use the portable ps -ef
+    # columns (UID PID PPID ...) so an existing master is not mistaken for a
+    # stopped service.
+    ps -ef | awk '
+        $3 == 1 && index($0, "nginx: master process") {
+            print $2
+            exit
+        }
+    '
+)"
+if [[ -n "${NGINX_MASTER_PID}" ]]; then
+    echo "[Nginx] 检测到现有 Nginx master（PID=${NGINX_MASTER_PID}），重载配置..."
+    if ! kill -HUP "${NGINX_MASTER_PID}"; then
+        restore_nginx_candidate
+        echo "[错误] Nginx master 重载失败，已恢复原配置。" >&2
+        exit 1
+    fi
 else
     echo "[Nginx] 未检测到运行中的 Nginx，启动服务..."
-    systemctl start nginx
+    if ! systemctl start nginx; then
+        restore_nginx_candidate
+        echo "[错误] Nginx 启动失败，已恢复原配置。" >&2
+        exit 1
+    fi
 fi
+rm -f "${BACKUP_CONF}"
 
 echo "[完成] Spider_XHS API 已启动：PID=${PID}，监听 ${HOST}:${PORT}"
 echo "[完成] Spider_XHS 公网地址：https://spider-xhs-api.winzyy.com"
