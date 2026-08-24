@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import json
 import os
+from base64 import urlsafe_b64encode
 from datetime import date, datetime, timedelta
+from hashlib import sha256
+from hmac import compare_digest
+from secrets import token_urlsafe
 from typing import Any
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query
+from cryptography.fernet import Fernet
+
+from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from xhs_utils.database import connect, load_database_config
@@ -21,6 +28,20 @@ class NoteIdsRequest(BaseModel):
 class TaskIdsRequest(BaseModel):
     crawl_task_ids: list[str] = Field(default_factory=list, max_length=500)
     latest_only: bool = False
+
+
+class CrawlJobRequest(BaseModel):
+    client_id: str = Field(min_length=1, max_length=64)
+    client_task_id: str = Field(min_length=1, max_length=128)
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    crawl_type: str = Field(min_length=1, max_length=64)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    credential: str = Field(min_length=1, max_length=4096)
+
+
+class CrawlClientRegistration(BaseModel):
+    client_id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9-]+$")
+    callback_url: str = Field(min_length=1, max_length=1024, pattern=r"^https://")
 
 
 class NoteRepository:
@@ -101,6 +122,80 @@ class NoteRepository:
         counts = {str(row["day"]): int(row["count"]) for row in rows}
         return {"total_before_start": int(before), "items": [{"date": str(start + timedelta(days=index)), "count": counts.get(str(start + timedelta(days=index)), 0)} for index in range(days)]}
 
+    def _credential_cipher(self) -> Fernet:
+        configured = os.getenv("CRAWL_JOB_CREDENTIAL_KEY")
+        if configured:
+            return Fernet(configured.encode("ascii"))
+        # A missing key must never result in plaintext persistence. This deterministic
+        # development-only fallback is intentionally rejected outside DEBUG mode.
+        if os.getenv("SPIDER_XHS_DEBUG") != "1":
+            raise ValueError("CRAWL_JOB_CREDENTIAL_KEY 未配置")
+        return Fernet(urlsafe_b64encode(sha256(b"spider-xhs-development-only").digest()))
+
+    def register_client(self, client_id: str, callback_url: str) -> dict[str, str]:
+        api_key = token_urlsafe(32)
+        webhook_secret = token_urlsafe(32)
+        encrypted_webhook_secret = self._credential_cipher().encrypt(webhook_secret.encode("utf-8"))
+        connection = connect(self.config, autocommit=True)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO crawl_client (client_id, callback_url, api_key_hash, webhook_secret_ciphertext, is_active) VALUES (%s, %s, %s, %s, 1) "
+                    "ON DUPLICATE KEY UPDATE callback_url = VALUES(callback_url), api_key_hash = VALUES(api_key_hash), webhook_secret_ciphertext = VALUES(webhook_secret_ciphertext), is_active = 1, updated_at = CURRENT_TIMESTAMP",
+                    (client_id, callback_url, sha256(api_key.encode("utf-8")).hexdigest(), encrypted_webhook_secret),
+                )
+        finally:
+            connection.close()
+        return {"client_id": client_id, "callback_url": callback_url, "api_key": api_key, "webhook_secret": webhook_secret}
+
+    def authenticate_client(self, client_id: str, api_key: str) -> bool:
+        client = self._one(
+            "SELECT api_key_hash FROM crawl_client WHERE client_id = %s AND is_active = 1",
+            (client_id,),
+        )
+        return bool(client and compare_digest(client["api_key_hash"], sha256(api_key.encode("utf-8")).hexdigest()))
+
+    def submit_job(self, payload: dict[str, Any]) -> dict[str, Any]:
+        existing = self._one(
+            "SELECT job_id, client_id, client_task_id, status FROM crawl_job "
+            "WHERE client_id = %s AND idempotency_key = %s",
+            (payload["client_id"], payload["idempotency_key"]),
+        )
+        if existing:
+            return existing
+        job_id = str(uuid4())
+        encrypted = self._credential_cipher().encrypt(payload["credential"].encode("utf-8"))
+        connection = connect(self.config, autocommit=True)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "INSERT INTO crawl_job (job_id, client_id, client_task_id, idempotency_key, crawl_type, parameters_json, credential_ciphertext, status) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, 'queued')",
+                    (job_id, payload["client_id"], payload["client_task_id"], payload["idempotency_key"], payload["crawl_type"], json.dumps(payload["parameters"], ensure_ascii=False), encrypted),
+                )
+        finally:
+            connection.close()
+        return {"job_id": job_id, "client_id": payload["client_id"], "client_task_id": payload["client_task_id"], "status": "queued"}
+
+    def get_job(self, job_id: str, client_id: str) -> dict[str, Any] | None:
+        return self._one(
+            "SELECT job_id, client_task_id, status, result_cursor FROM crawl_job WHERE job_id = %s AND client_id = %s",
+            (job_id, client_id),
+        )
+
+    def get_results(self, job_id: str, client_id: str, cursor: str | None, limit: int) -> dict[str, Any] | None:
+        if not self.get_job(job_id, client_id):
+            return None
+        after_id = int(cursor or 0)
+        rows = self._rows(
+            "SELECT id, crawl_task_id, crawl_time, note_id, liked_count, collected_count, comment_count, share_count, ai_title_filter_passed, cleaning_rule_passed, detail_crawl_succeeded "
+            "FROM spider_xhs_note_snapshot WHERE crawl_task_id = %s AND id > %s ORDER BY id LIMIT %s",
+            (job_id, after_id, limit + 1),
+        )
+        more = len(rows) > limit
+        items = [_serialize(item) for item in rows[:limit]]
+        return {"items": items, "next_cursor": str(items[-1]["id"]) if more and items else None}
+
 
 def _serialize(row: dict[str, Any] | None) -> dict[str, Any] | None:
     if row is None:
@@ -121,14 +216,77 @@ def _serialize(row: dict[str, Any] | None) -> dict[str, Any] | None:
     return result
 
 
-def create_app(config: dict[str, object] | None = None) -> FastAPI:
-    repository = NoteRepository(config or load_database_config())
+def create_app(
+    config: dict[str, object] | None = None,
+    repository: Any | None = None,
+    bootstrap_token: str | None = None,
+) -> FastAPI:
+    repository = repository or NoteRepository(config or load_database_config())
+    configured_bootstrap_token = bootstrap_token if bootstrap_token is not None else os.getenv("SPIDER_XHS_BOOTSTRAP_TOKEN", "")
     api = FastAPI(title="Spider_XHS internal API", docs_url=None, redoc_url=None, openapi_url=None)
+
+    def require_client(
+        x_internal_client: str = Header(default="", alias="X-Internal-Client"),
+        x_internal_key: str = Header(default="", alias="X-Internal-Key"),
+    ) -> str:
+        if not x_internal_client or not x_internal_key or not repository.authenticate_client(x_internal_client, x_internal_key):
+            raise HTTPException(status_code=401, detail="internal client authentication failed")
+        return x_internal_client
+
+    @api.post("/internal/v1/clients", status_code=201)
+    def register_client(
+        payload: CrawlClientRegistration,
+        x_internal_bootstrap_token: str = Header(default="", alias="X-Internal-Bootstrap-Token"),
+    ):
+        if not configured_bootstrap_token or not compare_digest(x_internal_bootstrap_token, configured_bootstrap_token):
+            raise HTTPException(status_code=403, detail="bootstrap access denied")
+        return repository.register_client(payload.client_id, payload.callback_url)
 
     @api.get("/internal/v1/notes")
     def list_notes(page: int = Query(1, ge=1), page_size: int = Query(50, ge=1, le=200), note_id: str | None = None, crawl_task_id: str | None = None, keyword: str | None = None, sort_by: str | None = None, sort_order: str = Query("desc", pattern="^(asc|desc)$")):
         items, total = repository.list_notes(page, page_size, note_id, crawl_task_id, keyword, sort_by, sort_order)
         return {"items": [_serialize(item) for item in items], "page": page, "page_size": page_size, "total": total}
+
+    @api.post("/internal/v1/crawl-jobs", status_code=202)
+    def submit_crawl_job(payload: CrawlJobRequest, client_id: str = Header(default="", alias="X-Internal-Client"), api_key: str = Header(default="", alias="X-Internal-Key")):
+        """Persist or return the caller's idempotent asynchronous job."""
+        if not client_id or not api_key or not repository.authenticate_client(client_id, api_key):
+            raise HTTPException(status_code=401, detail="internal client authentication failed")
+        if payload.client_id != client_id:
+            raise HTTPException(status_code=403, detail="client identity mismatch")
+        job = repository.submit_job(payload.model_dump())
+        return {
+            "job_id": job["job_id"],
+            "client_task_id": job["client_task_id"],
+            "status": job["status"],
+        }
+
+    @api.get("/internal/v1/crawl-jobs/{job_id}")
+    def get_crawl_job(job_id: str, x_internal_client: str = Header(default="", alias="X-Internal-Client"), x_internal_key: str = Header(default="", alias="X-Internal-Key")):
+        if not repository.authenticate_client(x_internal_client, x_internal_key):
+            raise HTTPException(status_code=401, detail="internal client authentication failed")
+        job = repository.get_job(job_id, x_internal_client)
+        if not job:
+            raise HTTPException(status_code=404, detail="crawl job not found")
+        return {
+            "job_id": job["job_id"], "client_task_id": job["client_task_id"],
+            "status": job["status"], "result_cursor": job.get("result_cursor"),
+        }
+
+    @api.get("/internal/v1/crawl-jobs/{job_id}/results")
+    def get_crawl_job_results(
+        job_id: str,
+        cursor: str | None = None,
+        limit: int = Query(100, ge=1, le=500),
+        x_internal_client: str = Header(default="", alias="X-Internal-Client"),
+        x_internal_key: str = Header(default="", alias="X-Internal-Key"),
+    ):
+        if not repository.authenticate_client(x_internal_client, x_internal_key):
+            raise HTTPException(status_code=401, detail="internal client authentication failed")
+        result = repository.get_results(job_id, x_internal_client, cursor, limit)
+        if result is None:
+            raise HTTPException(status_code=404, detail="crawl job not found")
+        return result
 
     @api.post("/internal/v1/notes/batch")
     def batch_notes(payload: NoteIdsRequest):

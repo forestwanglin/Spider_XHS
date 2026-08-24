@@ -35,6 +35,19 @@ CREATE TABLE IF NOT EXISTS spider_xhs_note (
   KEY idx_upload_time (upload_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS crawl_client (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  client_id VARCHAR(64) NOT NULL,
+  callback_url VARCHAR(1024) NOT NULL,
+  api_key_hash CHAR(64) NOT NULL,
+  webhook_secret_ciphertext BLOB NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_crawl_client_id (client_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS spider_xhs_note_snapshot (
   id BIGINT NOT NULL AUTO_INCREMENT,
   crawl_task_id VARCHAR(64) NOT NULL,
@@ -58,4 +71,55 @@ CREATE TABLE IF NOT EXISTS spider_xhs_note_snapshot (
     cleaning_rule_passed,
     detail_crawl_succeeded
   )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS crawl_job (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  job_id VARCHAR(36) NOT NULL,
+  client_id VARCHAR(64) NOT NULL,
+  client_task_id VARCHAR(128) NOT NULL,
+  idempotency_key VARCHAR(128) NOT NULL,
+  crawl_type VARCHAR(64) NOT NULL,
+  parameters_json JSON NOT NULL,
+  credential_ciphertext BLOB,
+  status VARCHAR(32) NOT NULL,
+  result_cursor VARCHAR(64),
+  lease_until DATETIME,
+  attempt_count INT NOT NULL DEFAULT 0,
+  error_message VARCHAR(1024),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  started_at DATETIME,
+  completed_at DATETIME,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_crawl_job_id (job_id),
+  UNIQUE KEY uk_crawl_job_client_idempotency (client_id, idempotency_key),
+  KEY idx_crawl_job_status_lease (status, lease_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS crawl_job_delivery (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  event_id VARCHAR(36) NOT NULL,
+  job_id VARCHAR(36) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  attempt_count INT NOT NULL DEFAULT 0,
+  next_attempt_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  delivered_at DATETIME,
+  last_error VARCHAR(1024),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_crawl_job_delivery_event (event_id),
+  KEY idx_crawl_job_delivery_pending (status, next_attempt_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS crawl_job_attempt (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  job_id VARCHAR(36) NOT NULL,
+  attempt_number INT NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME,
+  error_message VARCHAR(1024),
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_crawl_job_attempt (job_id, attempt_number),
+  KEY idx_crawl_job_attempt_job (job_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

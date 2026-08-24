@@ -14,3 +14,4 @@ PyMySQL
 openai
 fastapi
 uvicorn
+cryptography
