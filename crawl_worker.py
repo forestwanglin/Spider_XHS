@@ -10,6 +10,7 @@ import sys
 import time
 from hashlib import sha256
 from hmac import new as hmac_new
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -20,6 +21,7 @@ from xhs_utils.database import connect, load_database_config
 
 
 LEASE_SECONDS = 300
+PROJECT_ROOT = Path(__file__).resolve().parent
 
 
 def build_crawl_command(job: dict[str, Any], credential: str) -> list[str]:
@@ -84,7 +86,7 @@ def execute_one_job(config: dict[str, object]) -> bool:
     credential = _cipher().decrypt(job["credential_ciphertext"]).decode("utf-8")
     try:
         # Never log this command because it contains the transient Cookie.
-        result = subprocess.run(build_crawl_command(job, credential), check=False)
+        result = subprocess.run(build_crawl_command(job, credential), check=False, cwd=PROJECT_ROOT)
         _finish_job(config, job, "completed" if result.returncode == 0 else "failed", None if result.returncode == 0 else f"crawler exited with code {result.returncode}")
     except Exception as exc:
         _finish_job(config, job, "failed", str(exc))
