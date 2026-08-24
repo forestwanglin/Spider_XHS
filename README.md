@@ -234,17 +234,15 @@ Spider_XHS 的笔记与快照应使用独立的 `spider_xhs` 数据库。服务�
 ```bash
 DATABASE_URL='mysql+aiomysql://<user>:<password>@<mysql-host>:3306/spider_xhs'
 DATAS_BASE_PATH='/opt/Spider_XHS/data'
-SPIDER_XHS_API_HOST='<本机内网IP>'
-SPIDER_XHS_API_PORT='8088'
 ```
 
-`SPIDER_XHS_API_HOST` 必须是服务器内网 IP；未配置时脚本只监听 `127.0.0.1`。不要将 8088 端口暴露到公网。
+部署脚本强制 API 监听 `127.0.0.1:8088`；不要将 8088 端口暴露到公网。
 
 ```bash
-cd /opt/Spider_XHS
+cd /opt/Spider_XHS/deploy
 chmod +x startup.sh stop.sh restart.sh
 
-# 创建或复用 .venv、安装依赖并启动内网只读 API
+# 创建或复用 .venv、安装依赖，启动仅监听本机的 API 并发布 Nginx 配置
 ./startup.sh
 
 # 停止 / 重启
@@ -252,10 +250,12 @@ chmod +x startup.sh stop.sh restart.sh
 ./restart.sh
 ```
 
-日志写入 `logs/internal-api.log`，进程 PID 写入 `.runtime/internal-api.pid`。启动后可从允许访问的内网主机验证：
+日志写入 `/opt/Spider_XHS/logs/internal-api.log`，进程 PID 写入
+`/opt/Spider_XHS/.runtime/internal-api.pid`。API 只监听 `127.0.0.1:8088`，
+通过 Nginx 对外提供 `https://spider-xhs-api.winzyy.com`：
 
 ```bash
-curl http://<Spider_XHS内网IP>:8088/internal/v1/metrics/overview
+curl https://spider-xhs-api.winzyy.com/internal/v1/metrics/overview
 ```
 
 历史数据迁移、API 路由及回滚步骤见 [独立存储运行手册](./docs/isolated-storage.md)。

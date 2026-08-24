@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Stop only the process recorded by startup.sh.
+# Stop only the API process recorded by deploy/startup.sh.
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PID_FILE="${APP_DIR}/.runtime/internal-api.pid"
 
 if [[ ! -f "${PID_FILE}" ]]; then
