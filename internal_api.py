@@ -44,6 +44,10 @@ class CrawlClientRegistration(BaseModel):
     callback_url: str = Field(min_length=1, max_length=1024, pattern=r"^https://")
 
 
+class CookieValidationRequest(BaseModel):
+    credential: str = Field(min_length=1, max_length=4096)
+
+
 class NoteRepository:
     def __init__(self, config: dict[str, object]):
         self.config = config
@@ -155,6 +159,16 @@ class NoteRepository:
         )
         return bool(client and compare_digest(client["api_key_hash"], sha256(api_key.encode("utf-8")).hexdigest()))
 
+    def validate_xhs_cookie(self, credential: str) -> tuple[bool, str]:
+        """Validate transient credentials without persisting or echoing them."""
+        try:
+            from spider.spider import validate_cookies
+
+            valid, _, _ = validate_cookies(credential)
+            return bool(valid), "OK" if valid else "AUTH_EXPIRED"
+        except Exception:
+            return False, "VALIDATION_UNAVAILABLE"
+
     def submit_job(self, payload: dict[str, Any]) -> dict[str, Any]:
         existing = self._one(
             "SELECT job_id, client_id, client_task_id, status FROM crawl_job "
@@ -260,6 +274,17 @@ def create_app(
             "client_task_id": job["client_task_id"],
             "status": job["status"],
         }
+
+    @api.post("/internal/v1/xhs/cookie-validations")
+    def validate_xhs_cookie(
+        payload: CookieValidationRequest,
+        client_id: str = Header(default="", alias="X-Internal-Client"),
+        api_key: str = Header(default="", alias="X-Internal-Key"),
+    ):
+        if not client_id or not api_key or not repository.authenticate_client(client_id, api_key):
+            raise HTTPException(status_code=401, detail="internal client authentication failed")
+        valid, reason_code = repository.validate_xhs_cookie(payload.credential)
+        return {"valid": valid, "reason_code": reason_code}
 
     @api.get("/internal/v1/crawl-jobs/{job_id}")
     def get_crawl_job(job_id: str, x_internal_client: str = Header(default="", alias="X-Internal-Client"), x_internal_key: str = Header(default="", alias="X-Internal-Key")):
