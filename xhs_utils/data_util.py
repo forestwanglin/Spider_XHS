@@ -11,6 +11,7 @@ from loguru import logger
 from retry import retry
 
 from xhs_utils.http_util import REQUEST_TIMEOUT
+from xhs_utils.database import connect
 
 
 def norm_str(value):
@@ -239,18 +240,7 @@ def save_to_xlsx(datas, file_path, type='note'):
 
 
 def save_to_db(datas, db_config, crawl_task_id=''):
-    missing = [k for k in ['host', 'port', 'user', 'password', 'database'] if not db_config.get(k)]
-    if missing:
-        raise ValueError(f"MySQL 配置不完整，缺少: {', '.join(missing)}")
-    conn = pymysql.connect(
-        host=db_config['host'],
-        port=int(db_config['port']),
-        user=db_config['user'],
-        password=db_config['password'],
-        database=db_config['database'],
-        charset=db_config.get('charset', 'utf8mb4'),
-        autocommit=False,
-    )
+    conn = connect(db_config)
     try:
         def _get_by_path(obj, path, default=None):
             current = obj
@@ -401,7 +391,7 @@ def save_to_db(datas, db_config, crawl_task_id=''):
                         raise ValueError('数据表不存在，请先执行 sql/init_mysql.sql 初始化数据库') from e
                     raise
         conn.commit()
-        logger.info(f"数据保存至 MySQL({db_config['host']}:{db_config['port']}/{db_config['database']}), 条数: {len(rows)}")
+        logger.info(f"数据保存至独立 Spider_XHS 数据库，条数: {len(rows)}")
     finally:
         conn.close()
 

@@ -1,0 +1,13 @@
+[
+  {
+    "rule_type": "interaction",
+    "interaction_match_mode": "dimension_count",
+    "min_likes_count": 100,
+    "interaction_required_count": 1
+  },
+  {
+    "rule_type": "time",
+    "published_from": "2024-01-01",
+    "published_to": "2026-12-31"
+  }
+]

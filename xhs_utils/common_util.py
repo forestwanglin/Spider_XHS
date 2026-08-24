@@ -6,6 +6,7 @@ import binascii
 
 from loguru import logger
 from dotenv import load_dotenv
+from xhs_utils.database import load_database_config
 
 _A1_CHARSET = 'abcdefghijklmnopqrstuvwxyz1234567890'
 
@@ -14,14 +15,7 @@ def load_env():
     load_dotenv()
     cookies_str = os.getenv('COOKIES')
     datas_base_path = os.getenv('DATAS_BASE_PATH')
-    db_config = {
-        'host': os.getenv('MYSQL_HOST', '127.0.0.1'),
-        'port': int(os.getenv('MYSQL_PORT', '3306')),
-        'user': os.getenv('MYSQL_USER', ''),
-        'password': os.getenv('MYSQL_PASSWORD', ''),
-        'database': os.getenv('MYSQL_DATABASE', ''),
-        'charset': os.getenv('MYSQL_CHARSET', 'utf8mb4'),
-    }
+    db_config = load_database_config()
     return cookies_str, datas_base_path, db_config
 
 

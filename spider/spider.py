@@ -7,8 +7,7 @@ from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.xhs_pc import XHSPcAuth
 from xhs_utils.common_util import init, load_env
 from xhs_utils.cleaning_rule_filter import (
-    load_cleaning_rules_from_db,
-    parse_cleaning_rule_ids,
+    load_cleaning_rules_from_file,
     should_spider_note_detail,
 )
 from xhs_utils.data_util import handle_note_info, download_note, save_to_xlsx, save_to_db
@@ -305,7 +304,7 @@ if __name__ == '__main__':
         formatter_class=argparse.RawTextHelpFormatter,
         epilog='示例:\n'
                '  python -m spider.spider --query "榴莲"\n'
-               '  python -m spider.spider --query "榴莲" --cleaningRuleIds 1,2,3\n'
+               '  python -m spider.spider --query "榴莲" --cleaning-rules-file ./cleaning-rules.json\n'
                '  python -m spider.spider --noteUrl "https://www.xiaohongshu.com/explore/xxx"\n'
                '  python -m spider.spider --validate-cookies --cookies "a1=...; web_session=..."\n'
                '说明:\n'
@@ -318,16 +317,10 @@ if __name__ == '__main__':
     parser.add_argument('--login-type', choices=('cookie', 'qrcode', 'phone'), default='cookie', help='登录方式；默认 cookie')
     parser.add_argument('--taskId', required=False, default='', help='任务ID，可选；不传则默认当前时间 yyyyMMdd_HHmmss')
     parser.add_argument('--validate-cookies', action='store_true', help='只校验当前 cookies 是否有效；开启后必须显式传 --cookies')
-    parser.add_argument(
-        '--cleaningRuleIds',
-        '--filterRuleIds',
-        required=False,
-        default='',
-        help='清洗/过滤规则 ID 列表，可选；多个 ID 用英文或中文逗号分隔，例如: 1,2,3'
-    )
+    parser.add_argument('--cleaning-rules-file', default='', help='清洗规则 JSON 数组文件；不传或空数组表示不过滤')
     args = parser.parse_args()
 
-    env_cookies_str, _, db_config = load_env()
+    env_cookies_str, _, _ = load_env()
     explicit_cookie = args.cookies.strip() if args.cookies and args.cookies.strip() else ''
     if args.validate_cookies:
         if not explicit_cookie:
@@ -391,8 +384,7 @@ if __name__ == '__main__':
 
     # 3 搜索指定关键词的笔记
     query = args.query.strip()
-    cleaning_rule_ids = parse_cleaning_rule_ids(args.cleaningRuleIds)
-    cleaning_rules = load_cleaning_rules_from_db(cleaning_rule_ids, db_config)
+    cleaning_rules = load_cleaning_rules_from_file(args.cleaning_rules_file)
     query_num = args.num
     sort_type_choice = 0  # 0 综合排序, 1 最新, 2 最多点赞, 3 最多评论, 4 最多收藏
     note_type = 0 # 0 不限, 1 视频笔记, 2 普通笔记

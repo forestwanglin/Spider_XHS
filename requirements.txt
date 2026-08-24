@@ -12,3 +12,5 @@ qrcode
 curl_cffi==0.15.0
 PyMySQL
 openai
+fastapi
+uvicorn

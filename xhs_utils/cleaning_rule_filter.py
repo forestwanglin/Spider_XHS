@@ -1,73 +1,32 @@
 import json
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
-import pymysql
 from xhs_utils.data_util import parse_count
 
 
 MAX_COUNT = 9999999
 
 
-def parse_cleaning_rule_ids(value):
-    if not value:
+def load_cleaning_rules_from_file(path: str | Path | None):
+    """Load the sole cleaning-rule input. A missing path and [] both mean no filtering."""
+    if not path:
         return []
-    if isinstance(value, (list, tuple)):
-        raw_items = value
-    else:
-        raw_items = str(value).replace("，", ",").split(",")
-
-    result = []
-    seen = set()
-    for item in raw_items:
-        text = str(item).strip()
-        if not text:
-            continue
-        rule_id = int(text)
-        if rule_id in seen:
-            continue
-        seen.add(rule_id)
-        result.append(rule_id)
-    return result
-
-
-def load_cleaning_rules_from_db(rule_ids, db_config):
-    normalized_ids = parse_cleaning_rule_ids(rule_ids)
-    if not normalized_ids:
-        return []
-
-    missing = [key for key in ["host", "port", "user", "password", "database"] if not db_config.get(key)]
-    if missing:
-        raise ValueError(f"MySQL 配置不完整，缺少: {', '.join(missing)}")
-
-    placeholders = ", ".join(["%s"] * len(normalized_ids))
-    sql = f"""
-        SELECT *
-        FROM data_cleaning_rule
-        WHERE id IN ({placeholders})
-          AND is_deleted = 0
-          AND is_enabled = 1
-    """
-    conn = pymysql.connect(
-        host=db_config["host"],
-        port=int(db_config["port"]),
-        user=db_config["user"],
-        password=db_config["password"],
-        database=db_config["database"],
-        charset=db_config.get("charset", "utf8mb4"),
-        cursorclass=pymysql.cursors.DictCursor,
-    )
     try:
-        with conn.cursor() as cursor:
-            cursor.execute(sql, normalized_ids)
-            rows = cursor.fetchall()
-    finally:
-        conn.close()
-
-    rule_map = {int(row["id"]): _normalize_rule_row(row) for row in rows}
-    missing_ids = [rule_id for rule_id in normalized_ids if rule_id not in rule_map]
-    if missing_ids:
-        raise ValueError(f"清洗规则不存在或未启用: {', '.join(str(item) for item in missing_ids)}")
-    return [rule_map[rule_id] for rule_id in normalized_ids]
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise ValueError(f"清洗规则文件不存在: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"清洗规则文件不是合法 JSON: {exc.msg}") from exc
+    if not isinstance(value, list):
+        raise ValueError("清洗规则文件必须是 JSON 数组")
+    for index, rule in enumerate(value):
+        if not isinstance(rule, dict):
+            raise ValueError(f"清洗规则第 {index + 1} 项必须是对象")
+        rule_type = rule.get("rule_type", "interaction")
+        if rule_type not in {"interaction", "time", "content"}:
+            raise ValueError(f"清洗规则第 {index + 1} 项 rule_type 不支持: {rule_type}")
+    return value
 
 
 def should_spider_note_detail(note, cleaning_rules=None):
