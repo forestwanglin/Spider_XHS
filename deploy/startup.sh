@@ -45,6 +45,7 @@ fi
 "${VENV_DIR}/bin/python" -m pip install --disable-pip-version-check -q -r "${APP_DIR}/requirements.txt"
 
 nohup "${VENV_DIR}/bin/python" -m uvicorn internal_api:app \
+    --app-dir "${APP_DIR}" \
     --host "${HOST}" \
     --port "${PORT}" \
     --env-file "${ENV_FILE}" \
