@@ -21,6 +21,7 @@ from xhs_utils.database import connect, load_database_config
 
 
 LEASE_SECONDS = 300
+PARTIAL_FAILED_EXIT_CODE = 2
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
@@ -31,10 +32,20 @@ def build_crawl_command(job: dict[str, Any], credential: str) -> list[str]:
     if job.get("crawl_type") == "direct_note":
         for url in parameters.get("urls") or []:
             command.extend(["--noteUrl", str(url)])
+    elif job.get("crawl_type") == "profile_posts":
+        command.extend(["--profileId", str(parameters["profile_id"])])
     else:
         command.extend(["--query", str(parameters.get("query") or ""), "--num", str(parameters.get("num") or 20)])
     command.extend(["--taskId", str(job["job_id"]), "--cookies", credential])
     return command
+
+
+def crawl_status_from_returncode(returncode: int) -> tuple[str, str | None]:
+    if returncode == 0:
+        return "completed", None
+    if returncode == PARTIAL_FAILED_EXIT_CODE:
+        return "partial_failed", "部分笔记详情抓取失败"
+    return "failed", f"crawler exited with code {returncode}"
 
 
 def _cipher() -> Fernet:
@@ -87,7 +98,8 @@ def execute_one_job(config: dict[str, object]) -> bool:
     try:
         # Never log this command because it contains the transient Cookie.
         result = subprocess.run(build_crawl_command(job, credential), check=False, cwd=PROJECT_ROOT)
-        _finish_job(config, job, "completed" if result.returncode == 0 else "failed", None if result.returncode == 0 else f"crawler exited with code {result.returncode}")
+        status, error = crawl_status_from_returncode(result.returncode)
+        _finish_job(config, job, status, error)
     except Exception as exc:
         _finish_job(config, job, "failed", str(exc))
     finally:

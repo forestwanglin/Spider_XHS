@@ -324,26 +324,49 @@ class XHS_Apis():
            :param user_id: 你想要获取的用户的id
            返回用户的所有笔记
         """
-        cursor = ''
-        note_list = []
         try:
             urlParse = urllib.parse.urlparse(user_url)
             user_id = urlParse.path.split("/")[-1]
             kvDist = _get_query_params(urlParse)
             xsec_token = kvDist['xsec_token'] if 'xsec_token' in kvDist else ""
             xsec_source = kvDist['xsec_source'] if 'xsec_source' in kvDist else "pc_search"
+            return self.get_user_all_notes_by_profile_id(user_id, xsec_token, xsec_source, proxies)
+        except Exception as e:
+            success = False
+            msg = _log_api_error(e)
+            return success, msg, []
+
+    def get_user_all_notes_by_profile_id(
+        self,
+        profile_id: str,
+        xsec_token: str = '',
+        xsec_source: str = 'pc_user',
+        proxies: dict = None,
+    ):
+        """Get all posted notes for a profile ID with safe cursor pagination."""
+        cursor = ''
+        seen_cursors = set()
+        note_list = []
+        try:
             while True:
-                success, msg, res_json = self.get_user_note_info(user_id, cursor, xsec_token, xsec_source, proxies)
+                success, msg, res_json = self.get_user_note_info(profile_id, cursor, xsec_token, xsec_source, proxies)
                 if not success:
-                    raise Exception(msg)
-                notes = res_json["data"]["notes"]
-                if 'cursor' in res_json["data"]:
-                    cursor = str(res_json["data"]["cursor"])
-                else:
-                    break
+                    raise RuntimeError(msg)
+                data = (res_json or {}).get("data") or {}
+                notes = data.get("notes")
+                if not isinstance(notes, list):
+                    raise RuntimeError("用户笔记响应缺少 data.notes")
                 note_list.extend(notes)
-                if len(notes) == 0 or not res_json["data"]["has_more"]:
+                if not data.get("has_more"):
                     break
+                next_cursor = data.get("cursor")
+                if next_cursor is None or str(next_cursor) == '':
+                    raise RuntimeError("用户笔记分页缺少 cursor")
+                next_cursor = str(next_cursor)
+                if next_cursor in seen_cursors:
+                    raise RuntimeError("用户笔记分页 cursor 重复")
+                seen_cursors.add(next_cursor)
+                cursor = next_cursor
         except Exception as e:
             success = False
             msg = _log_api_error(e)

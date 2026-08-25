@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from base64 import urlsafe_b64encode
 from datetime import date, datetime, timedelta
 from hashlib import sha256
@@ -19,6 +20,9 @@ from pydantic import BaseModel, Field
 
 from xhs_utils.database import connect, load_database_config
 
+
+SUPPORTED_CRAWL_TYPES = {"direct_note", "search", "profile_posts"}
+PROFILE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 class NoteIdsRequest(BaseModel):
     note_ids: list[str] = Field(default_factory=list, max_length=500)
@@ -42,6 +46,20 @@ class CrawlJobRequest(BaseModel):
 class CrawlClientRegistration(BaseModel):
     client_id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9-]+$")
     callback_url: str = Field(min_length=1, max_length=1024, pattern=r"^https://")
+
+
+def validate_crawl_job_payload(payload: CrawlJobRequest) -> dict[str, Any]:
+    """Validate type-specific parameters before encrypting a crawl credential."""
+    if payload.crawl_type not in SUPPORTED_CRAWL_TYPES:
+        raise HTTPException(status_code=422, detail="unsupported crawl_type")
+
+    data = payload.model_dump()
+    if payload.crawl_type == "profile_posts":
+        profile_id = data["parameters"].get("profile_id")
+        if not isinstance(profile_id, str) or not PROFILE_ID_PATTERN.fullmatch(profile_id.strip()):
+            raise HTTPException(status_code=422, detail="parameters.profile_id is invalid")
+        data["parameters"] = {**data["parameters"], "profile_id": profile_id.strip()}
+    return data
 
 
 class CookieValidationRequest(BaseModel):
@@ -268,7 +286,7 @@ def create_app(
             raise HTTPException(status_code=401, detail="internal client authentication failed")
         if payload.client_id != client_id:
             raise HTTPException(status_code=403, detail="client identity mismatch")
-        job = repository.submit_job(payload.model_dump())
+        job = repository.submit_job(validate_crawl_job_payload(payload))
         return {
             "job_id": job["job_id"],
             "client_task_id": job["client_task_id"],

@@ -213,6 +213,30 @@ class Data_Spider:
         logger.info(f'爬取用户所有视频 {user_url}: {success}, msg: {msg}')
         return note_list, success, msg
 
+    def spider_profile_all_notes(self, profile_id: str, base_path: dict, save_choice: str, crawl_task_id: str = '', proxies=None):
+        """Crawl one profile's posted notes and report a job-safe terminal status."""
+        try:
+            success, msg, all_note_info = self.xhs_apis.get_user_all_notes_by_profile_id(profile_id, proxies=proxies)
+            if not success:
+                return [], "failed", str(msg)
+            note_list = []
+            for simple_note_info in all_note_info:
+                note_id = simple_note_info.get('note_id')
+                if not note_id:
+                    continue
+                xsec_token = simple_note_info.get('xsec_token', '')
+                note_url = f"https://www.xiaohongshu.com/explore/{note_id}"
+                if xsec_token:
+                    note_url += f"?xsec_token={xsec_token}&xsec_source=pc_user"
+                note_list.append(note_url)
+            saved_count = self.spider_some_note(note_list, base_path, save_choice, crawl_task_id=crawl_task_id, proxies=proxies)
+            if saved_count != len(all_note_info):
+                return note_list, "partial_failed", "部分笔记详情抓取失败"
+            return note_list, "completed", "success"
+        except Exception as e:
+            logger.exception(f'爬取用户主页帖子失败 profile_id={profile_id}: {e}')
+            return [], "failed", str(e)
+
     def spider_some_search_note(self, query: str, require_num: int, base_path: dict, save_choice: str, sort_type_choice=0, note_type=0, note_time=0, note_range=0, pos_distance=0, geo: dict = None,  excel_name: str = '', crawl_task_id: str = '', cleaning_rules: list = None, proxies=None):
         """
             指定数量搜索笔记，设置排序方式和笔记类型和笔记数量
@@ -312,6 +336,7 @@ if __name__ == '__main__':
     )
     parser.add_argument('--query', required=False, default='', help='搜索关键词；普通抓取时必填')
     parser.add_argument('--noteUrl', required=False, action='append', default=[], help='笔记 URL；可重复传入，直接抓取笔记并保存到数据库')
+    parser.add_argument('--profileId', required=False, default='', help='用户主页 ID；抓取该用户全部可访问的已发布笔记')
     parser.add_argument('--num', type=int, default=20, help='搜索数量，默认 20')
     parser.add_argument('--cookies', required=False, default='', help='Cookie，可选；不传则使用 .env 中 COOKIES。校验模式下必须显式传入')
     parser.add_argument('--login-type', choices=('cookie', 'qrcode', 'phone'), default='cookie', help='登录方式；默认 cookie')
@@ -319,6 +344,10 @@ if __name__ == '__main__':
     parser.add_argument('--validate-cookies', action='store_true', help='只校验当前 cookies 是否有效；开启后必须显式传 --cookies')
     parser.add_argument('--cleaning-rules-file', default='', help='清洗规则 JSON 数组文件；不传或空数组表示不过滤')
     args = parser.parse_args()
+
+    profile_id = args.profileId.strip()
+    if profile_id and (args.query.strip() or any(item and item.strip() for item in args.noteUrl)):
+        raise ValueError('--profileId 不能与 --query 或 --noteUrl 同时使用')
 
     env_cookies_str, _, _ = load_env()
     explicit_cookie = args.cookies.strip() if args.cookies and args.cookies.strip() else ''
@@ -378,6 +407,16 @@ if __name__ == '__main__':
         )
         logger.info(f"直接爬取入口保存数量: {saved_count}/{len(note_urls)}")
         raise SystemExit(0 if saved_count > 0 else 1)
+
+    if profile_id:
+        _, status, message = data_spider.spider_profile_all_notes(
+            profile_id,
+            base_path,
+            SAVE_CHOICE_MEDIA_DB,
+            crawl_task_id=crawl_task_id,
+        )
+        logger.info(f"用户主页抓取完成 profile_id={profile_id}, status={status}, msg={message}")
+        raise SystemExit(0 if status == "completed" else 2 if status == "partial_failed" else 1)
 
     if not args.query or not args.query.strip():
         raise ValueError('Query 未提供：普通抓取请传 --query')
